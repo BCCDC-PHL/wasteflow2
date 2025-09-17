@@ -5,6 +5,102 @@
     "description": "Nextflow pipeline for pathogen surveillance in wastewater",
     "type": "object",
     "$defs": {
+        "generic_options": {
+            "title": "Generic options",
+            "type": "object",
+            "fa_icon": "fas fa-file-import",
+            "description": "Less common options for the pipeline, typically set in a config file.",
+            "help_text": "These options are common to all nf-core pipelines and allow you to customise some of the core preferences for how the pipeline runs.\n\nTypically these options would be set in a Nextflow config file loaded for all pipeline runs, such as `~/.nextflow/config`.",
+            "properties": {
+                "version": {
+                    "type": "boolean",
+                    "description": "Display version and exit.",
+                    "fa_icon": "fas fa-question-circle",
+                    "hidden": true
+                },
+                "publish_dir_mode": {
+                    "type": "string",
+                    "default": "copy",
+                    "description": "Method used to save pipeline results to output directory.",
+                    "help_text": "The Nextflow `publishDir` option specifies which intermediate files should be saved to the output directory. This option tells the pipeline what method should be used to move these files. See [Nextflow docs](https://www.nextflow.io/docs/latest/process.html#publishdir) for details.",
+                    "fa_icon": "fas fa-copy",
+                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
+                    "hidden": true
+                },
+                "email_on_fail": {
+                    "type": "string",
+                    "description": "Email address for completion summary, only when pipeline fails.",
+                    "fa_icon": "fas fa-exclamation-triangle",
+                    "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
+                    "help_text": "An email address to send a summary email to when the pipeline is completed - ONLY sent if the pipeline does not exit successfully.",
+                    "hidden": true
+                },
+                "plaintext_email": {
+                    "type": "boolean",
+                    "description": "Send plain-text email instead of HTML.",
+                    "fa_icon": "fas fa-remove-format",
+                    "hidden": true
+                },
+                "max_multiqc_email_size": {
+                    "type": "string",
+                    "description": "File size limit when attaching MultiQC reports to summary emails.",
+                    "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
+                    "default": "25.MB",
+                    "fa_icon": "fas fa-file-upload",
+                    "hidden": true
+                },
+                "monochrome_logs": {
+                    "type": "boolean",
+                    "description": "Do not use coloured log outputs.",
+                    "fa_icon": "fas fa-palette",
+                    "hidden": true
+                },
+                "hook_url": {
+                    "type": "string",
+                    "description": "Incoming hook URL for messaging service",
+                    "fa_icon": "fas fa-people-group",
+                    "help_text": "Incoming hook URL for messaging service. Currently, MS Teams and Slack are supported.",
+                    "hidden": true
+                },
+                "multiqc_config": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Custom config file to supply to MultiQC.",
+                    "fa_icon": "fas fa-cog",
+                    "hidden": true
+                },
+                "multiqc_logo": {
+                    "type": "string",
+                    "description": "Custom logo file to supply to MultiQC. File name must also be set in the MultiQC config file",
+                    "fa_icon": "fas fa-image",
+                    "hidden": true
+                },
+                "multiqc_methods_description": {
+                    "type": "string",
+                    "description": "Custom MultiQC yaml file containing HTML including a methods description.",
+                    "fa_icon": "fas fa-cog"
+                },
+                "skip_multiqc": {
+                    "type": "boolean"
+                },
+                "validate_params": {
+                    "type": "boolean",
+                    "description": "Boolean whether to validate parameters against the schema at runtime",
+                    "default": true,
+                    "fa_icon": "fas fa-check-square",
+                    "hidden": true
+                },
+                "trace_report_suffix": {
+                    "type": "string",
+                    "fa_icon": "far calendar",
+                    "description": "Suffix to add to the trace report filename. Default is the date and time in the format yyyy-MM-dd_HH-mm-ss.",
+                    "hidden": true
+                },
+                "discard_trimmed_pass": {
+                    "type": "boolean"
+                }
+            }
+        },
         "input_output_options": {
             "title": "Input/output options",
             "type": "object",
@@ -91,98 +187,207 @@
                 }
             }
         },
-        "generic_options": {
-            "title": "Generic options",
+        "read_processing_options": {
+            "title": "Read processing options",
             "type": "object",
-            "fa_icon": "fas fa-file-import",
-            "description": "Less common options for the pipeline, typically set in a config file.",
-            "help_text": "These options are common to all nf-core pipelines and allow you to customise some of the core preferences for how the pipeline runs.\n\nTypically these options would be set in a Nextflow config file loaded for all pipeline runs, such as `~/.nextflow/config`.",
+            "description": "Parameters to describe raw read processing",
+            "default": "",
             "properties": {
-                "version": {
+                "skip_fastp": {
+                    "type": "boolean"
+                },
+                "save_merged": {
+                    "type": "boolean"
+                },
+                "skip_control_oligo_qc": {
+                    "type": "boolean"
+                },
+                "probe_panel_db_path": {
+                    "type": "string",
+                    "default": "\"\""
+                },
+                "save_trimmed_fail": {
                     "type": "boolean",
-                    "description": "Display version and exit.",
-                    "fa_icon": "fas fa-question-circle",
-                    "hidden": true
+                    "default": true
                 },
-                "publish_dir_mode": {
+                "skip_read_processing": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "taxonomy_qc_options": {
+            "title": "Taxonomy QC options",
+            "type": "object",
+            "description": "Parameters used for describing taxonomy QC and extraction",
+            "default": "",
+            "properties": {
+                "skip_target_extraction": {
+                    "type": "boolean"
+                },
+                "skip_kraken2": {
+                    "type": "boolean"
+                },
+                "kraken2_db_name": {
                     "type": "string",
-                    "default": "copy",
-                    "description": "Method used to save pipeline results to output directory.",
-                    "help_text": "The Nextflow `publishDir` option specifies which intermediate files should be saved to the output directory. This option tells the pipeline what method should be used to move these files. See [Nextflow docs](https://www.nextflow.io/docs/latest/process.html#publishdir) for details.",
-                    "fa_icon": "fas fa-copy",
-                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
-                    "hidden": true
+                    "default": "k2_minusb"
                 },
-                "email_on_fail": {
-                    "type": "string",
-                    "description": "Email address for completion summary, only when pipeline fails.",
-                    "fa_icon": "fas fa-exclamation-triangle",
-                    "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
-                    "help_text": "An email address to send a summary email to when the pipeline is completed - ONLY sent if the pipeline does not exit successfully.",
-                    "hidden": true
+                "kraken2_db": {
+                    "type": "string"
                 },
-                "plaintext_email": {
+                "kraken2_assembly_host_filter": {
                     "type": "boolean",
-                    "description": "Send plain-text email instead of HTML.",
-                    "fa_icon": "fas fa-remove-format",
-                    "hidden": true
+                    "default": true
                 },
-                "max_multiqc_email_size": {
+                "kraken2_targets": {
                     "type": "string",
-                    "description": "File size limit when attaching MultiQC reports to summary emails.",
-                    "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
-                    "default": "25.MB",
-                    "fa_icon": "fas fa-file-upload",
-                    "hidden": true
+                    "default": "'2697049,3049954,11308'"
                 },
-                "monochrome_logs": {
+                "combine_kraken2_reports": {
                     "type": "boolean",
-                    "description": "Do not use coloured log outputs.",
-                    "fa_icon": "fas fa-palette",
-                    "hidden": true
+                    "default": true
                 },
-                "hook_url": {
-                    "type": "string",
-                    "description": "Incoming hook URL for messaging service",
-                    "fa_icon": "fas fa-people-group",
-                    "help_text": "Incoming hook URL for messaging service. Currently, MS Teams and Slack are supported.",
-                    "hidden": true
+                "skip_bracken": {
+                    "type": "boolean"
                 },
-                "multiqc_config": {
-                    "type": "string",
-                    "format": "file-path",
-                    "description": "Custom config file to supply to MultiQC.",
-                    "fa_icon": "fas fa-cog",
-                    "hidden": true
-                },
-                "multiqc_logo": {
-                    "type": "string",
-                    "description": "Custom logo file to supply to MultiQC. File name must also be set in the MultiQC config file",
-                    "fa_icon": "fas fa-image",
-                    "hidden": true
-                },
-                "multiqc_methods_description": {
-                    "type": "string",
-                    "description": "Custom MultiQC yaml file containing HTML including a methods description.",
-                    "fa_icon": "fas fa-cog"
-                },
-                "validate_params": {
+                "kraken2_variants_host_filter": {
                     "type": "boolean",
-                    "description": "Boolean whether to validate parameters against the schema at runtime",
-                    "default": true,
-                    "fa_icon": "fas fa-check-square",
-                    "hidden": true
+                    "default": true
                 },
-                "trace_report_suffix": {
+                "skip_taxonomy_qc": {
+                    "type": "boolean"
+                },
+                "skip_taxonomy_classification": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "annotation_options": {
+            "title": "Annotation options",
+            "type": "object",
+            "description": "Parameters used to annotate variants",
+            "default": "",
+            "properties": {
+                "skip_snpeff": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "mapping_options": {
+            "title": "Mapping Options",
+            "type": "object",
+            "description": "Parameters used for describing mapping",
+            "default": "",
+            "properties": {
+                "min_mapped_reads": {
+                    "type": "integer",
+                    "default": 1000
+                },
+                "skip_alignment_stats": {
+                    "type": "boolean"
+                },
+                "skip_mosdepth": {
+                    "type": "boolean"
+                },
+                "skip_bam_qc": {
+                    "type": "boolean"
+                },
+                "skip_picard_metrics": {
+                    "type": "boolean"
+                },
+                "skip_markduplicates": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "skip_alignment": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "variant_calling_options": {
+            "title": "Variant calling options",
+            "type": "object",
+            "description": "Parameters used to describe variant calling",
+            "default": "",
+            "properties": {
+                "save_mpileup": {
+                    "type": "boolean"
+                },
+                "skip_variants": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "freyja_options": {
+            "title": "Freyja options",
+            "type": "object",
+            "description": "Parameters used for Freyja analysis",
+            "default": "",
+            "properties": {
+                "freyja_repeats": {
+                    "type": "integer",
+                    "default": 100
+                },
+                "skip_freyja_boot": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "freyja_db_name_sars_cov2": {
                     "type": "string",
-                    "fa_icon": "far calendar",
-                    "description": "Suffix to add to the trace report filename. Default is the date and time in the format yyyy-MM-dd_HH-mm-ss.",
-                    "hidden": true
+                    "default": "freyja_db"
+                },
+                "freyja_depthcutoff": {
+                    "type": "integer",
+                    "default": 0
+                },
+                "freyja_barcodes_sars_cov2": {
+                    "type": "string"
+                },
+                "freyja_lineages_sars_cov2": {
+                    "type": "string"
+                },
+                "freyja_db_name_rsv_b": {
+                    "type": "string"
+                },
+                "freyja_db_name_rsv_a": {
+                    "type": "string"
+                },
+                "freyja_barcodes_rsv_a": {
+                    "type": "string"
+                },
+                "freyja_barcodes_rsv_b": {
+                    "type": "string"
+                },
+                "skip_freyja": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "influenza_serotyping_options": {
+            "title": "Influenza serotyping options",
+            "type": "object",
+            "description": "",
+            "default": "",
+            "properties": {
+                "flu_db_fasta": {
+                    "type": "string"
+                },
+                "flu_db_info": {
+                    "type": "string"
+                },
+                "score_threshold": {
+                    "type": "number",
+                    "default": 0.9
+                },
+                "skip_influenza_serotyping": {
+                    "type": "boolean"
                 }
             }
         }
     },
     "allOf": [
+        {
+            "$ref": "#/$defs/generic_options"
+        },
         {
             "$ref": "#/$defs/input_output_options"
         },
@@ -190,7 +395,25 @@
             "$ref": "#/$defs/institutional_config_options"
         },
         {
-            "$ref": "#/$defs/generic_options"
+            "$ref": "#/$defs/read_processing_options"
+        },
+        {
+            "$ref": "#/$defs/taxonomy_qc_options"
+        },
+        {
+            "$ref": "#/$defs/annotation_options"
+        },
+        {
+            "$ref": "#/$defs/mapping_options"
+        },
+        {
+            "$ref": "#/$defs/variant_calling_options"
+        },
+        {
+            "$ref": "#/$defs/freyja_options"
+        },
+        {
+            "$ref": "#/$defs/influenza_serotyping_options"
         }
     ]
 }
