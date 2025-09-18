@@ -219,35 +219,7 @@ workflow WASTEFLOW {
     // SUBWORKFLOW: Call variants with FreeBayes + iVar + LoFreq
     //
     if (!params.skip_variants) {
-
-        log.info("=== CHANNEL DIAGNOSTICS ===")
         ch_variant_bam = ch_bam
-        // Check all input channels
-        ch_variant_bam.count().view { "ch_variant_bam count: ${it}" }
-        ch_sars_cov2_fasta.count().view { "ch_sars_cov2_fasta count: ${it}" }
-        ch_sars_cov2_fai.count().view { "ch_sars_cov2_fai count: ${it}" }
-        ch_sars_cov2_chrom_sizes.count().view { "ch_sars_cov2_chrom_sizes count: ${it}" }
-        ch_sars_cov2_gff.count().view { "ch_sars_cov2_gff count: ${it}" }
-        ch_sars_cov2_snpeff_db.count().view { "ch_sars_cov2_snpeff_db count: ${it}" }
-        ch_sars_cov2_snpeff_config.count().view { "ch_sars_cov2_snpeff_config count: ${it}" }
-
-        // Check RSV channels
-        ch_rsv_a_fasta.count().view { "ch_rsv_a_fasta count: ${it}" }
-        ch_rsv_a_fai.count().view { "ch_rsv_a_fai count: ${it}" }
-        ch_rsv_a_chrom_sizes.count().view { "ch_rsv_a_chrom_sizes count: ${it}" }
-        ch_rsv_a_gff.count().view { "ch_rsv_a_gff count: ${it}" }
-        ch_rsv_a_snpeff_db.count().view { "ch_rsv_a_snpeff_db count: ${it}" }
-        ch_rsv_a_snpeff_config.count().view { "ch_rsv_a_snpeff_config count: ${it}" }
-
-        ch_rsv_b_fasta.count().view { "ch_rsv_b_fasta count: ${it}" }
-        ch_rsv_b_fai.count().view { "ch_rsv_b_fai count: ${it}" }
-        ch_rsv_b_chrom_sizes.count().view { "ch_rsv_b_chrom_sizes count: ${it}" }
-        ch_rsv_b_gff.count().view { "ch_rsv_b_gff count: ${it}" }
-        ch_rsv_b_snpeff_db.count().view { "ch_rsv_b_snpeff_db count: ${it}" }
-        ch_rsv_b_snpeff_config.count().view { "ch_rsv_b_snpeff_config count: ${it}" }
-
-        log.info("=== END DIAGNOSTICS ===")
-
         ch_vcf = Channel.empty()
         ch_tbi = Channel.empty()
         ch_ivar_counts_multiqc = Channel.empty()
