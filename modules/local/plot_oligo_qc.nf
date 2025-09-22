@@ -10,6 +10,8 @@ process PLOT_OLIGO_QC {
     path concatenated_counts
 
     output:
+    path "*.png", emit: plots
+    path "*.tsv", emit: counts
     path "versions.yml", emit: versions
 
     when:
