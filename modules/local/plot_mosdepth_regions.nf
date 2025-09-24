@@ -14,6 +14,7 @@ process PLOT_MOSDEPTH_REGIONS {
     path '*coverage.tsv', emit: coverage_tsv
     path '*heatmap.pdf' , optional:true, emit: heatmap_pdf
     path '*heatmap.tsv' , optional:true, emit: heatmap_tsv
+    path 'all_samples.*coverage.tsv', emit: all_coverage_tsv
     path "versions.yml" , emit: versions
 
     when:
