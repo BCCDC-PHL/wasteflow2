@@ -1,18 +1,56 @@
 # BCCDC-PHL/wasteflow2
 
-## Introduction
+## Introduction  
+**BCCDC-PHL/wasteflow2** is a bioinformatics workflow designed for the processing and analysis of probe-enriched wastewater sequencing data for **viral surveillance**.  
+The pipeline currently supports three viral targets of high public health relevance:  
 
-**BCCDC-PHL/wasteflow2** is a bioinformatics pipeline that ...
+- **SARS-CoV-2**  
+- **Respiratory Syncytial Virus (RSV-A and RSV-B)**  
+- **Influenza (A and B)**  
 
-<!-- TODO nf-core:
-   Complete this sentence with a 2-3 sentence summary of what types of data the pipeline ingests, a brief overview of the
-   major pipeline sections and the types of output it produces. You're giving an overview to someone new
-   to nf-core here, in 15-20 seconds. For an example, see https://github.com/nf-core/rnaseq/blob/master/README.md#introduction
--->
+Built on [Nextflow DSL2](https://www.nextflow.io/) and the [nf-core](https://nf-co.re) framework, the workflow ensures scalability, reproducibility, and portability across different compute environments (local, HPC, cloud, Docker/Singularity).  
 
-<!-- TODO nf-core: Include a figure that guides the user through the major workflow steps. Many nf-core
-     workflows use the "tube map" design for that. See https://nf-co.re/docs/guidelines/graphic_design/workflow_diagrams#examples for examples.   -->
-<!-- TODO nf-core: Fill in short bullet-pointed list of the default steps in the pipeline -->1. Read QC ([`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))2. Present QC for raw reads ([`MultiQC`](http://multiqc.info/))
+---
+
+## Workflow Summary  
+
+The pipeline consists of the following major steps:  
+
+1. **Read Quality Control**  
+   - Read trimming, adapter removal, and filtering using [`fastp`](https://github.com/OpenGene/fastp).  
+   - Quality control reporting using [`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and aggregated with [`MultiQC`](http://multiqc.info/).  
+
+2. **Read Classification and Filtering**  
+   - Reads are aligned against a **combined Viral + Human reference database**.  
+   - Reads are classified and tagged with their respective **NCBI Taxonomy IDs**.  
+   - **Human reads** are excluded from downstream analyses.  
+   - Taxonomic profiles are generated using [`Kraken2`](https://ccb.jhu.edu/software/kraken2/) and visualized interactively with [`Krona`](https://github.com/marbl/Krona/wiki).  
+   - **Nextflow branching structure** is used to separate and filter reads per target taxon, enabling downstream parallel processing of SARS-CoV-2, RSV, and Influenza.  
+
+3. **Per-Target Genome Processing**  
+
+   ### SARS-CoV-2 and RSV (A & B)  
+   - Reads mapped to their respective references using the `prepare_genome` subworkflow.  
+   - RSV-A and RSV-B are first aligned jointly to an RSV reference database; BAM files are then **split into RSV-A and RSV-B** for independent processing.  
+   - Each BAM undergoes:  
+     - Indexing  
+     - Coverage calculation and statistics  
+   - Variant calling:  
+     - Currently supported: [`iVar`](https://andersen-lab.github.io/ivar/html/)  
+     - Planned: [`FreeBayes`](https://github.com/freebayes/freebayes)  
+   - Variants from iVar are:  
+     - Exported as `.tsv`, converted to VCF  
+     - Annotated using [`SnpEff`](https://pcingola.github.io/SnpEff/) and [`SnpSift`](https://pcingola.github.io/SnpEff/se_snpSift/)  
+     - Screened for **key mutations** based on a mutation watchlist  
+   - VCFs are also processed with [`Freyja`](https://github.com/andersen-lab/Freyja) for lineage deconvolution.  
+
+   ### Influenza  
+   - (To be added — process differs slightly from the above workflow.)  
+
+4. **Final Reporting**  
+   - Results from all stages are collated and summarized into an integrated [`MultiQC`](http://multiqc.info/) report.  
+
+---
 
 ## Usage
 
