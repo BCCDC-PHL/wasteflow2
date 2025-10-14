@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -6,7 +7,7 @@ from matplotlib.patches import Patch, Rectangle
 import argparse
 import os
 
-def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
+def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2", prefix="output"):
     # Load data
     df = pd.read_csv(file_path, sep="\t")
 
@@ -141,7 +142,7 @@ def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
         gene_legend_handles = [Patch(color=gene_colors[gene], label=gene) for gene in gene_colors]
         ax.legend(handles=gene_legend_handles, title="Genes", loc="upper right", fontsize='small', title_fontsize='small')
 
-        output_file = f"{pathogen}_coverage_boxplot_{sample_type}.png"
+        output_file = f"{prefix}_{pathogen}_coverage_boxplot_{sample_type}.png"
         plt.tight_layout()
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         print(f"Saved plot to: {output_file}")
@@ -151,12 +152,13 @@ def main():
     parser = argparse.ArgumentParser(description="Plot genome coverage boxplots with gene annotations.")
     parser.add_argument('--input', required=True, help="Path to TSV file with coverage data")
     parser.add_argument('--pathogen', required=True, choices=["sars-cov-2", "rsva", "rsvb"], help="Pathogen type")
+    parser.add_argument('--prefix', required=True, help="Prefix for output file")
     args = parser.parse_args()
 
     if not os.path.isfile(args.input):
         raise FileNotFoundError(f"Input file not found: {args.input}")
 
-    plot_coverage_with_annotations(args.input, pathogen=args.pathogen)
+    plot_coverage_with_annotations(args.input, pathogen=args.pathogen, prefix=args.prefix)
 
 if __name__ == "__main__":
     main()
