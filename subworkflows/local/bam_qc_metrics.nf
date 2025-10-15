@@ -16,6 +16,10 @@ include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2       
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_A              } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B              } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_AMPLICON_SARS_COV2        } from '../../modules/local/plot_mosdepth_regions'
+include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2         } from '../../modules/local/plot_mosdepth_regions_aggregate'
+include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_A             } from '../../modules/local/plot_mosdepth_regions_aggregate'
+include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_B             } from '../../modules/local/plot_mosdepth_regions_aggregate'
+include { PLOT_MULTIPANEL_COVERAGE_HEATMAP                                         } from '../../modules/local/plot_multilpanel_heatmap'
 
 workflow BAM_QC_METRICS {
     take:
@@ -193,22 +197,62 @@ workflow BAM_QC_METRICS {
             .mix(MOSDEPTH_GENOME_RSV_A.out.global_txt)
             .mix(MOSDEPTH_GENOME_RSV_B.out.global_txt)
 
+
+        sars_cov_2_coverage = Channel.empty()
+        rsva_coverage = Channel.empty()
+        rsvb_coverage = Channel.empty()
+
         PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2(
             MOSDEPTH_GENOME_SARS_COV2.out.regions_bed.collect { it[1] }
         )
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2.out.versions)
+        sars_cov_2_coverage = PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2.out.all_coverage_tsv.map { tsv -> [[id: 'MN908947.3'], tsv] }
 
         // RSV-A combined plot
         PLOT_MOSDEPTH_REGIONS_GENOME_RSV_A(
             MOSDEPTH_GENOME_RSV_A.out.regions_bed.collect { it[1] }
         )
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_GENOME_RSV_A.out.versions)
+        rsva_coverage = PLOT_MOSDEPTH_REGIONS_GENOME_RSV_A.out.all_coverage_tsv.map { tsv -> [[id: 'PP109421.1'], tsv] }
 
         // RSV-B combined plot
         PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B(
             MOSDEPTH_GENOME_RSV_B.out.regions_bed.collect { it[1] }
         )
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B.out.versions)
+        rsvb_coverage = PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B.out.all_coverage_tsv.map { tsv -> [[id: 'OP975389.1'], tsv] }
+
+
+        sars_cov_2_coverage_safe = sars_cov_2_coverage.ifEmpty([[id: 'MN908947.3_empty'], []])
+        rsva_coverage_safe = rsva_coverage.ifEmpty([[id: 'PP109421.1_empty'], []])
+        rsvb_coverage_safe = rsvb_coverage.ifEmpty([[id: 'OP975389.1_empty'], []])
+
+        PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2(sars_cov_2_coverage, 'sars-cov-2')
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2.out.versions)
+
+        PLOT_MOSDEPTH_REGIONS_AGG_RSV_A(rsva_coverage, 'rsva')
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_RSV_A.out.versions)
+
+        PLOT_MOSDEPTH_REGIONS_AGG_RSV_B(rsvb_coverage, 'rsvb')
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_RSV_B.out.versions)
+
+
+        // Multipanel gene level heatmap
+        ch_sars_bed = params.sars_cov2_bed ? Channel.fromPath(params.sars_cov2_bed).map { bed -> [[id: 'MN908947.3'], bed] } : Channel.empty()
+        ch_rsv_a_bed = params.rsv_a_bed ? Channel.fromPath(params.rsv_a_bed).map { bed -> [[id: 'PP109421.1'], bed] } : Channel.empty()
+        ch_rsv_b_bed = params.rsv_b_bed ? Channel.fromPath(params.rsv_b_bed).map { bed -> [[id: 'OP975389.1'], bed] } : Channel.empty()
+        ch_metadata = params.metadata ? Channel.fromPath(params.metadata) : Channel.value([])
+
+        PLOT_MULTIPANEL_COVERAGE_HEATMAP(
+            sars_cov_2_coverage_safe,
+            rsva_coverage_safe,
+            rsvb_coverage_safe,
+            ch_sars_bed,
+            ch_rsv_a_bed,
+            ch_rsv_b_bed,
+            ch_metadata,
+        )
+        ch_versions = ch_versions.mix(PLOT_MULTIPANEL_COVERAGE_HEATMAP.out.versions)
     }
 
     emit:
@@ -218,5 +262,9 @@ workflow BAM_QC_METRICS {
     picard_multiqc                  = ch_picard_multiqc // channel: [meta, metrics] - Picard metrics files for MultiQC
     mosdepth_multiqc                = ch_mosdepth_multiqc // channel: [meta, global_txt] - MOSDEPTH global coverage files for MultiQC
     amplicon_heatmap_multiqc        = ch_amplicon_heatmap_multiqc // channel: heatmap_tsv - amplicon coverage heatmap for MultiQC (SARS-CoV-2 only)
+    sars_cov_2_boxplots             = PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2.out.boxplots // channel: [meta, png] - SARS-CoV-2 genome coverage boxplots
+    rsva_boxplots                   = PLOT_MOSDEPTH_REGIONS_AGG_RSV_A.out.boxplots // channel: [meta, png] - RSV-A genome coverage boxplots
+    rsvb_boxplots                   = PLOT_MOSDEPTH_REGIONS_AGG_RSV_B.out.boxplots // channel: [meta, png] - RSV-B genome coverage box
+    multipanel_coverage_heatmap     = PLOT_MULTIPANEL_COVERAGE_HEATMAP.out.heatmap // channel: [meta, png] - multi-panel coverage heatmap
     versions                        = ch_versions // channel: versions.yml - software versions
 }
