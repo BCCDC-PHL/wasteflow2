@@ -1,11 +1,11 @@
 process PREPARE_PRIMER_FASTA {
-    tag "$adapters"
+    tag "${adapters}"
     label 'process_low'
 
     conda "conda-forge::sed=4.8"
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/ubuntu:24.04' :
-        'nf-core/ubuntu:24.04' }"
+    container "${workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container
+        ? 'https://depot.galaxyproject.org/singularity/ubuntu:24.04'
+        : 'nf-core/ubuntu:24.04'}"
 
     input:
     path adapters
@@ -20,7 +20,7 @@ process PREPARE_PRIMER_FASTA {
     def args = task.ext.args ?: ''
 
     """
-    sed -r '/^[ACTGactg]+\$/ s/$args/X/g' $adapters > adapters.sub.fa
+    sed -r '/^[ACTGactg]+\$/ s/${args}/X/g' ${adapters} > adapters.sub.fa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
