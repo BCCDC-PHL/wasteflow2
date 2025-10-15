@@ -560,12 +560,16 @@ class IvarVariants:
             # Process each dictionary in the list
             for hap in valid_hap:
                 # Create a dictionary of items that meet the threshold
-                valid = all(value['AF'] > self.consensus_af for value in hap.values())
+                valid = all(value["AF"] > self.consensus_af for value in hap.values())
                 if valid:
                     valid_hap_fil.append(hap)
                 else:
                     # Create a list of dictionaries for items that do not meet the threshold
-                    separate_dicts = [{key: value} for key, value in hap.items() if value['AF'] <= self.consensus_af]
+                    separate_dicts = [
+                        {key: value}
+                        for key, value in hap.items()
+                        if value["AF"] <= self.consensus_af
+                    ]
 
                     # Extend filtered_list with separate_dicts
                     for sep in separate_dicts:
