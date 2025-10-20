@@ -19,8 +19,8 @@ def parse_read_summary(file_path):
     if df.empty:
         return []
 
-    df["HA"] = df["serotype"].str.extract(r"(H\d+)")
-    df["NA"] = df["serotype"].str.extract(r"(N\d+)")
+    df["HA"] = df["read_assignment"].str.extract(r"(H\d+)")
+    df["NA"] = df["read_assignment"].str.extract(r"(N\d+)")
 
     serotypes = []
     for _, row in df.iterrows():
