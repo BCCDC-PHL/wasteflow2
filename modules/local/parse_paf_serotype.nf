@@ -1,6 +1,6 @@
 process PARSE_PAF_SEROTYPE {
     tag "${meta.id}"
-    label 'process_medium'
+    label 'process_high'
 
     conda "conda-forge::r-base=4.3.1 conda-forge::r-data.table=1.14.8 conda-forge::r-stringr=1.5.0 conda-forge::r-dplyr=1.1.3 conda-forge::r-ggplot2=3.4.4"
     container "${workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container
