@@ -6,6 +6,9 @@ include { BAM_SORT_STATS_SAMTOOLS as BAM_SORT_STATS_SAMTOOLS_RSV_B     } from '.
 // Import local subworkflows
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_SARS_COV2       } from './fastq_align_minimap2'
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_RSV_COMBINED    } from './fastq_align_minimap2'
+include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H1N1            } from './fastq_align_minimap2'
+include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H3N2            } from './fastq_align_minimap2'
+include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H5N1            } from './fastq_align_minimap2'
 
 // Import modules
 include { SAMTOOLS_VIEW as SAMTOOLS_VIEW_RSV_A                         } from '../../modules/nf-core/samtools/view/main'
@@ -22,6 +25,9 @@ workflow ALIGNMENT {
     rsv_combined_fasta     // channel: RSV combined fasta
     rsv_a_fasta            // channel: RSV-A fasta
     rsv_b_fasta            // channel: RSV-B fasta
+    h1n1_fasta             // channel: H1N1 fasta
+    h3n2_fasta             // channel: H3N2 fasta
+    h5n1_fasta             // channel: H5N1 fasta
 
     main:
     ch_versions = Channel.empty()
@@ -65,6 +71,40 @@ workflow ALIGNMENT {
             [new_meta, reads]
         }
 
+    // Filter and prepare RSV samples (serotype: H1N1) - using H1N1 reference
+    ch_h1n1_samples = ch_all_extracted_reads
+        .filter { meta, reads ->
+            def is_h1n1 = meta.serotype == 'H1N1'
+            return is_h1n1
+        }
+        .map { meta, reads ->
+            def new_meta = meta.clone()
+            new_meta.genome = 'H1N1'
+            [new_meta, reads]
+        }
+    
+    // Filter and prepare RSV samples (serotype: H3N2) - using COMBINED RSV reference
+    ch_h3n2_samples = ch_all_extracted_reads
+        .filter { meta, reads ->
+            def is_h3n2 = meta.serotype == 'H3N2'
+            return is_h3n2
+        }
+        .map { meta, reads ->
+            def new_meta = meta.clone()
+            new_meta.genome = 'H3N2'
+            [new_meta, reads]
+        }
+    // Filter and prepare RSV samples (serotype: H5N1) - using COMBINED RSV reference
+    ch_h5n1_samples = ch_all_extracted_reads
+        .filter { meta, reads ->
+            def is_h5n1 = meta.serotype == 'H5N1'
+            return is_h5n1
+        }
+        .map { meta, reads ->
+            def new_meta = meta.clone()
+            new_meta.genome = 'H5N1'
+            [new_meta, reads]
+        }
     // Run SARS-CoV-2 alignment
     FASTQ_ALIGN_MINIMAP2_SARS_COV2(
         ch_sars_cov2_samples,
@@ -78,10 +118,37 @@ workflow ALIGNMENT {
     )
     ch_versions = ch_versions.mix(FASTQ_ALIGN_MINIMAP2_RSV_COMBINED.out.versions)
 
-    // Mix SARS-CoV-2 outputs
+    FASTQ_ALIGN_MINIMAP2_H1N1(
+        ch_h1n1_samples,
+        h1n1_fasta.map { fasta -> [[id: 'H1N1'], fasta] },
+    )
+    ch_versions = ch_versions.mix(FASTQ_ALIGN_MINIMAP2_H1N1.out.versions)
+
+    FASTQ_ALIGN_MINIMAP2_H3N2(
+        ch_h3n2_samples,
+        h3n2_fasta.map { fasta -> [[id: 'H3N2'], fasta] },
+    )
+    ch_versions = ch_versions.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.versions)
+    
+    FASTQ_ALIGN_MINIMAP2_H5N1(
+        ch_h5n1_samples,
+        h5n1_fasta.map { fasta -> [[id: 'H5N1'], fasta] },
+    )
+    ch_versions = ch_versions.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.versions)
+
+    // Mix SARS-CoV-2 and Influenza outputs
     ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_SARS_COV2.out.bam)
+    ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_H1N1.out.bam)
+    ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.bam)
+    ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.bam)
     ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_SARS_COV2.out.bai)
+    ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_H1N1.out.bai)
+    ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.bai)
+    ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.bai)
     ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_SARS_COV2.out.flagstat)
+    ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_H1N1.out.flagstat)
+    ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.flagstat)
+    ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.flagstat)
 
     // Prepare RSV separation inputs
     ch_rsv_bam_bai = FASTQ_ALIGN_MINIMAP2_RSV_COMBINED.out.bam.join(FASTQ_ALIGN_MINIMAP2_RSV_COMBINED.out.bai, by: [0])
