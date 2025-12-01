@@ -125,20 +125,17 @@ workflow INFLUENZA_SEROTYPING {
             // Combine R1 and R2 results back into pairs
             ch_serotype_reads = SEQKIT_GREP.out.filter
                 .map { meta, filtered_reads ->
-                    // Create a key for grouping by sample and serotype
                     def key = "${meta.id}_${meta.serotype}"
                     [key, meta.read_type, filtered_reads, meta]
                 }
                 .groupTuple(by: 0)
                 .map { key, read_types, files, metas ->
-                    // Reconstruct the metadata without read_type
                     def meta = metas[0].clone()
                     meta.remove('read_type')
-
-                    // Sort files by read type to ensure R1 comes before R2
+                    
                     def sorted_pairs = [read_types, files].transpose().sort { it[0] }
                     def sorted_files = sorted_pairs.collect { it[1] }
-
+                    
                     [meta, sorted_files]
                 }
 
