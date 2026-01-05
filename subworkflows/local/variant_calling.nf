@@ -103,8 +103,6 @@ workflow VARIANT_CALLING {
     ch_versions = ch_versions.mix(VARIANTS_IVAR_RSV_A.out.versions)
     ch_versions = ch_versions.mix(VARIANTS_IVAR_RSV_B.out.versions)
 
-    log.info("VARIANTS_IVAR processing completed")
-
 
     sars_cov_2_vcf = VARIANTS_IVAR_SARS_COV2.out.vcf
     // channel: [meta, vcf] - VCF files with variants
