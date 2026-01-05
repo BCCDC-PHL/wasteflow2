@@ -18,7 +18,9 @@ include { MOSDEPTH as MOSDEPTH_SEGMENTS            } from '../../modules/nf-core
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2 } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_A     } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B     } from '../../modules/local/plot_mosdepth_regions'
-include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS         } from '../../modules/local/plot_mosdepth_regions'
+include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1         } from '../../modules/local/plot_mosdepth_regions'
+include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2         } from '../../modules/local/plot_mosdepth_regions'
+include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1         } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2 } from '../../modules/local/plot_mosdepth_regions_aggregate'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_A     } from '../../modules/local/plot_mosdepth_regions_aggregate'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_B     } from '../../modules/local/plot_mosdepth_regions_aggregate'
@@ -303,6 +305,9 @@ workflow BAM_QC_METRICS {
         sars_cov_2_coverage = Channel.empty()
         rsva_coverage = Channel.empty()
         rsvb_coverage = Channel.empty()
+        h1n1_coverage = Channel.empty()
+        h3n2_coverage = Channel.empty()
+        h5n1_coverage = Channel.empty()
 
         PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2(
             MOSDEPTH_GENOME_SARS_COV2.out.regions_bed.collect { it[1] }
@@ -322,16 +327,46 @@ workflow BAM_QC_METRICS {
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B.out.versions)
         rsvb_coverage = PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B.out.all_coverage_tsv.map { tsv -> [[id: 'OP975389.1'], tsv] }
 
+        //
+        // Filter MOSDEPTH outputs by genome type
+        //
+        MOSDEPTH_SEGMENTS.out.regions_bed
+            .branch { meta, bed ->
+                h1n1: meta.genome =~ /(?i)H1N1/
+                h3n2: meta.genome =~ /(?i)H3N2/
+                h5n1: meta.genome =~ /(?i)H5N1/
+            }
+            .set { ch_mosdepth_branched }
+
+
         // Segments coverage plot
-        PLOT_MOSDEPTH_REGIONS_SEGMENTS(
-            MOSDEPTH_SEGMENTS.out.regions_bed.collect { it[1] }
+        PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1(
+            ch_mosdepth_branched.h1n1.collect { it[1] }
         )
-        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_SEGMENTS.out.versions)
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1.out.versions)
+
+        PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2(
+            ch_mosdepth_branched.h3n2.collect { it[1] }
+        )
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2.out.versions)
+
+        PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1(
+            ch_mosdepth_branched.h5n1.collect { it[1] }
+        )
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1.out.versions)
+
+        h1n1_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1.out.all_coverage_tsv.map { tsv -> [[id: 'H1N1'], tsv] }
+        h3n2_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2.out.all_coverage_tsv.map { tsv -> [[id: 'H3N2'], tsv] }
+        h5n1_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1.out.all_coverage_tsv.map { tsv -> [[id: 'H5N1'], tsv] }
+
 
         // Aggregate plots
         sars_cov_2_coverage_safe = sars_cov_2_coverage.ifEmpty([[id: 'MN908947.3_empty'], []])
         rsva_coverage_safe = rsva_coverage.ifEmpty([[id: 'PP109421.1_empty'], []])
         rsvb_coverage_safe = rsvb_coverage.ifEmpty([[id: 'OP975389.1_empty'], []])
+        h1n1_coverage_safe = h1n1_coverage.ifEmpty([[id: 'H1N1_empty'], []])
+        h3n2_coverage_safe = h3n2_coverage.ifEmpty([[id: 'H3N2_empty'], []])
+        h5n1_coverage_safe = h5n1_coverage.ifEmpty([[id: 'H5N1_empty'], []])
 
         PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2(sars_cov_2_coverage, 'sars-cov-2')
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2.out.versions)
@@ -346,17 +381,12 @@ workflow BAM_QC_METRICS {
         ch_sars_bed = params.sars_cov2_bed ? Channel.fromPath(params.sars_cov2_bed).map { bed -> [[id: 'MN908947.3'], bed] } : Channel.empty()
         ch_rsv_a_bed = params.rsv_a_bed ? Channel.fromPath(params.rsv_a_bed).map { bed -> [[id: 'PP109421.1'], bed] } : Channel.empty()
         ch_rsv_b_bed = params.rsv_b_bed ? Channel.fromPath(params.rsv_b_bed).map { bed -> [[id: 'OP975389.1'], bed] } : Channel.empty()
+        ch_h1n1_bed = params.genomes['H1N1'].bed ? Channel.fromPath(params.genomes['H1N1'].bed ).map { bed -> [[id: 'H1N1'], bed] } : Channel.empty() 
+        ch_h3n2_bed = params.genomes['H3N2'].bed ? Channel.fromPath(params.genomes['H3N2'].bed ).map { bed -> [[id: 'H1N1'], bed] } : Channel.empty()
+        ch_h5n1_bed = params.genomes['H5N1'].bed ? Channel.fromPath(params.genomes['H5N1'].bed ).map { bed -> [[id: 'H5N1'], bed] } : Channel.empty()
         ch_metadata = params.metadata ? Channel.fromPath(params.metadata) : Channel.value([])
-
-        // For segments, we'll use empty channels for now (or handle separately)
-        h1n1_coverage_safe = Channel.value([[id: 'H1N1_empty'], []])
-        h3n2_coverage_safe = Channel.value([[id: 'H3N2_empty'], []])
-        h5n1_coverage_safe = Channel.value([[id: 'H5N1_empty'], []])
-        ch_h1n1_bed = Channel.value([[id: 'H1N1_empty'], []])
-        ch_h3n2_bed = Channel.value([[id: 'H3N2_empty'], []])
-        ch_h5n1_bed = Channel.value([[id: 'H5N1_empty'], []])
-
-        /*PLOT_MULTIPANEL_COVERAGE_HEATMAP(
+        
+        PLOT_MULTIPANEL_COVERAGE_HEATMAP(
             sars_cov_2_coverage_safe,
             rsva_coverage_safe,
             rsvb_coverage_safe,
@@ -372,7 +402,7 @@ workflow BAM_QC_METRICS {
             ch_metadata
         )
         ch_versions = ch_versions.mix(PLOT_MULTIPANEL_COVERAGE_HEATMAP.out.versions)
-        */
+        
     }
 
     emit:
