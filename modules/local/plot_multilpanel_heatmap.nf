@@ -11,13 +11,22 @@ process PLOT_MULTIPANEL_COVERAGE_HEATMAP {
     tuple val(meta), path(sars_coverage)
     tuple val(meta2), path(rsv_a_coverage)
     tuple val(meta3), path(rsv_b_coverage)
-    tuple val(meta5), path(sars_bed)
-    tuple val(meta6), path(rsv_a_bed)
-    tuple val(meta7), path(rsv_b_bed)
+    tuple val(meta4), path(h1n1_coverage)
+    tuple val(meta5), path(h3n2_coverage)
+    tuple val(meta6), path(h5n1_coverage)
+    tuple val(meta7), path(sars_bed)
+    tuple val(meta8), path(rsv_a_bed)
+    tuple val(meta9), path(rsv_b_bed)
+    tuple val(meta10), path(h1n1_bed)
+    tuple val(meta11), path(h3n2_bed)
+    tuple val(meta12), path(h5n1_bed)
     path metadata
 
     output:
-    tuple val(meta), path("*.png"), emit: heatmap
+    tuple val(meta), path("*_sarscov2_rsv.png"), emit: heatmap_sars
+    tuple val(meta4), path("*_influenza.png"), emit: heatmap_influenza
+    tuple val(meta), path("*_sarscov2_rsv.tsv"), emit: tsv_sars
+    tuple val(meta4), path("*_influenza.tsv"), emit: tsv_influenza
     path "versions.yml", emit: versions
 
     when:
@@ -30,6 +39,9 @@ process PLOT_MULTIPANEL_COVERAGE_HEATMAP {
     def sars_arg = sars_coverage ? "--sars ${sars_coverage}" : ""
     def rsv_a_arg = rsv_a_coverage ? "--rsvA ${rsv_a_coverage}" : ""
     def rsv_b_arg = rsv_b_coverage ? "--rsvB ${rsv_b_coverage}" : ""
+    def h1n1_arg = h1n1_coverage ? "--h1n1 ${h1n1_coverage}" : ""
+    def h3n2_arg = h3n2_coverage ? "--h3n2 ${h3n2_coverage}" : ""
+    def h5n1_arg = h5n1_coverage ? "--h5n1 ${h5n1_coverage}" : ""
 
 
     """
@@ -37,12 +49,21 @@ process PLOT_MULTIPANEL_COVERAGE_HEATMAP {
         ${sars_arg} \\
         ${rsv_a_arg} \\
         ${rsv_b_arg} \\
+        ${h1n1_arg} \\
+        ${h3n2_arg} \\
+        ${h5n1_arg} \\
         --sars_bed ${sars_bed} \\
         --rsvA_bed ${rsv_a_bed} \\
         --rsvB_bed ${rsv_b_bed} \\
+        --h1n1_bed ${h1n1_bed} \\
+        --h3n2_bed ${h3n2_bed} \\
+        --h5n1_bed ${h5n1_bed} \\
         ${args} \\
         ${metadata_arg} \\
-        --out ${prefix}_coverage_heatmap.png 
+        --out_sarsrsv ${prefix}_sarscov2_rsv.png \\
+        --out_influenza ${prefix}_influenza.png \\
+        --out_sarsrsv_tsv ${prefix}_sarscov2_rsv.tsv \\
+        --out_influenza_tsv ${prefix}_influenza.tsv
         
 
     cat <<-END_VERSIONS > versions.yml
