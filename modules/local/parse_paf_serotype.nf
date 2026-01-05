@@ -26,6 +26,7 @@ process PARSE_PAF_SEROTYPE {
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
     parse_pafs_influenza_A.R \\
+        --threads ${task.cpus} \\
         ${flu_db_info} \\
         ${paf} \\
         ${prefix} \\
