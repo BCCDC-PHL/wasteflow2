@@ -13,4 +13,8 @@ results*
 *.tsv
 *.sh
 *.bak
-adhoc*
+adhoc_analysis/*
+bin/archive/*
+adhoc_scripts/*
+*/archive/*
+.params*
