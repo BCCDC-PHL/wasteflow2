@@ -27,6 +27,10 @@ include { CONTROL_OLIGO_QC        } from '../subworkflows/local/control_oligo_qc
 include { MULTIQC                 } from '../modules/nf-core/multiqc/main'
 include { BAM_TRIM_PRIMERS_IVAR   } from '../subworkflows/local/bam_trim_primers_ivar'
 
+// Import local modules
+include { SPLIT_BAM_BY_SEGMENT     } from '../modules/local/split_bam_by_segment'
+include { REHEADER_SEGMENT_BAM } from '../modules/local/reheader_segment_bam'
+
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     RUN MAIN WORKFLOW
@@ -51,19 +55,24 @@ workflow WASTEFLOW {
     //
     if (!params.skip_genome_preparation) {
         GENOME_PREPARATION()
-        // Cache all outputs immediately after GENOME_PREPARATION
+        
+        // SARS-CoV-2
         ch_sars_cov2_fasta = GENOME_PREPARATION.out.sars_cov2_fasta
         ch_sars_cov2_fai = GENOME_PREPARATION.out.sars_cov2_fai
         ch_sars_cov2_chrom_sizes = GENOME_PREPARATION.out.sars_cov2_chrom_sizes
         ch_sars_cov2_gff = GENOME_PREPARATION.out.sars_cov2_gff
         ch_sars_cov2_snpeff_db = GENOME_PREPARATION.out.sars_cov2_snpeff_db
         ch_sars_cov2_snpeff_config = GENOME_PREPARATION.out.sars_cov2_snpeff_config
+
+        // RSV-A
         ch_rsv_a_fasta = GENOME_PREPARATION.out.rsv_a_fasta
         ch_rsv_a_fai = GENOME_PREPARATION.out.rsv_a_fai
         ch_rsv_a_chrom_sizes = GENOME_PREPARATION.out.rsv_a_chrom_sizes
         ch_rsv_a_gff = GENOME_PREPARATION.out.rsv_a_gff
         ch_rsv_a_snpeff_db = GENOME_PREPARATION.out.rsv_a_snpeff_db
         ch_rsv_a_snpeff_config = GENOME_PREPARATION.out.rsv_a_snpeff_config
+        
+        // RSV-B
         ch_rsv_b_fasta = GENOME_PREPARATION.out.rsv_b_fasta
         ch_rsv_b_fai = GENOME_PREPARATION.out.rsv_b_fai
         ch_rsv_b_chrom_sizes = GENOME_PREPARATION.out.rsv_b_chrom_sizes
@@ -71,11 +80,73 @@ workflow WASTEFLOW {
         ch_rsv_b_snpeff_db = GENOME_PREPARATION.out.rsv_b_snpeff_db
         ch_rsv_b_snpeff_config = GENOME_PREPARATION.out.rsv_b_snpeff_config
         ch_rsv_combined_fasta = GENOME_PREPARATION.out.rsv_combined_fasta
+        
+        // H1N1 - Full genome
+        ch_h1n1_fasta = GENOME_PREPARATION.out.h1n1_fasta
+        ch_h1n1_fai = GENOME_PREPARATION.out.h1n1_fai
+        ch_h1n1_chrom_sizes = GENOME_PREPARATION.out.h1n1_chrom_sizes
+        
+        // H1N1 - Segments
+        ch_h1n1_segment_fasta = GENOME_PREPARATION.out.h1n1_segment_fasta
+        ch_h1n1_segment_gff = GENOME_PREPARATION.out.h1n1_segment_gff
+        ch_h1n1_segment_fai = GENOME_PREPARATION.out.h1n1_segment_fai
+        ch_h1n1_segment_chrom_sizes = GENOME_PREPARATION.out.h1n1_segment_chrom_sizes
+        ch_h1n1_segment_snpeff_db = GENOME_PREPARATION.out.h1n1_segment_snpeff_db
+        ch_h1n1_segment_snpeff_config = GENOME_PREPARATION.out.h1n1_segment_snpeff_config
+        
+        // H3N2 - Full genome
+        ch_h3n2_fasta = GENOME_PREPARATION.out.h3n2_fasta
+        ch_h3n2_fai = GENOME_PREPARATION.out.h3n2_fai
+        ch_h3n2_chrom_sizes = GENOME_PREPARATION.out.h3n2_chrom_sizes
 
-        // Then use these cached channels in both ALIGNMENT and VARIANT_CALLING
+        // H3N2 - Segments
+        ch_h3n2_segment_fasta = GENOME_PREPARATION.out.h3n2_segment_fasta
+        ch_h3n2_segment_gff = GENOME_PREPARATION.out.h3n2_segment_gff
+        ch_h3n2_segment_fai = GENOME_PREPARATION.out.h3n2_segment_fai
+        ch_h3n2_segment_chrom_sizes = GENOME_PREPARATION.out.h3n2_segment_chrom_sizes
+        ch_h3n2_segment_snpeff_db = GENOME_PREPARATION.out.h3n2_segment_snpeff_db
+        ch_h3n2_segment_snpeff_config = GENOME_PREPARATION.out.h3n2_segment_snpeff_config
+        
+        // H5N1 - Full genome
+        ch_h5n1_fasta = GENOME_PREPARATION.out.h5n1_fasta
+        ch_h5n1_fai = GENOME_PREPARATION.out.h5n1_fai
+        ch_h5n1_chrom_sizes = GENOME_PREPARATION.out.h5n1_chrom_sizes
+
+        // H5N1 - Segments
+        ch_h5n1_segment_fasta = GENOME_PREPARATION.out.h5n1_segment_fasta
+        ch_h5n1_segment_gff = GENOME_PREPARATION.out.h5n1_segment_gff
+        ch_h5n1_segment_fai = GENOME_PREPARATION.out.h5n1_segment_fai
+        ch_h5n1_segment_chrom_sizes = GENOME_PREPARATION.out.h5n1_segment_chrom_sizes
+        ch_h5n1_segment_snpeff_db = GENOME_PREPARATION.out.h5n1_segment_snpeff_db
+        ch_h5n1_segment_snpeff_config = GENOME_PREPARATION.out.h5n1_segment_snpeff_config
+
         ch_versions = ch_versions.mix(GENOME_PREPARATION.out.versions)
-    }
+        }
 
+    // Combine all segment references into single channels
+    ch_all_segment_fasta = ch_h1n1_segment_fasta
+        .mix(ch_h3n2_segment_fasta)
+        .mix(ch_h5n1_segment_fasta)
+
+    ch_all_segment_fai = ch_h1n1_segment_fai
+        .mix(ch_h3n2_segment_fai)
+        .mix(ch_h5n1_segment_fai)
+
+    ch_all_segment_gff = ch_h1n1_segment_gff
+        .mix(ch_h3n2_segment_gff)
+        .mix(ch_h5n1_segment_gff)
+    
+    ch_all_segment_chrom_sizes = ch_h1n1_segment_chrom_sizes
+        .mix(ch_h3n2_segment_chrom_sizes)
+        .mix(ch_h5n1_segment_chrom_sizes)
+    
+    ch_all_segment_snpeff_db = ch_h1n1_segment_snpeff_db
+        .mix(ch_h3n2_segment_snpeff_db)
+        .mix(ch_h5n1_segment_snpeff_db)
+    
+    ch_all_segment_snpeff_config = ch_h1n1_segment_snpeff_config
+        .mix(ch_h3n2_segment_snpeff_config)
+        .mix(ch_h5n1_segment_snpeff_config)
 
     //
     // SUBWORKFLOW: Process reads (QC, trim)
@@ -116,7 +187,18 @@ workflow WASTEFLOW {
         .mix(TAXONOMY_CLASSIFICATION.out.rsv_reads)
         .mix(TAXONOMY_CLASSIFICATION.out.flu_reads)
 
-
+    //
+    // SUBWORKFLOW: Influenza serotyping
+    //
+    if (!params.skip_influenza_serotyping) {
+        INFLUENZA_SEROTYPING(
+            ch_all_extracted_reads
+        )
+        ch_versions = ch_versions.mix(INFLUENZA_SEROTYPING.out.versions)
+    }
+    influenza_serotype_reads = INFLUENZA_SEROTYPING.out.serotype_reads
+    ch_all_extracted_reads = ch_all_extracted_reads.mix(influenza_serotype_reads)
+    
     //
     // SUBWORKFLOW: Alignment processing
     //
@@ -127,6 +209,9 @@ workflow WASTEFLOW {
             ch_rsv_combined_fasta,
             ch_rsv_a_fasta,
             ch_rsv_b_fasta,
+            ch_h1n1_fasta,
+            ch_h3n2_fasta,
+            ch_h5n1_fasta
         )
         ch_versions = ch_versions.mix(ALIGNMENT.out.versions)
 
@@ -179,47 +264,147 @@ workflow WASTEFLOW {
             }
             .set { ch_fail_mapping_multiqc }
     }
+    
+    
+    // Define influenza types and their BED files
+    def influenza_bed_files = [
+        'H1N1': params.genomes['H1N1'].bed,
+        'H3N2': params.genomes['H3N2'].bed,
+        'H5N1': params.genomes['H5N1'].bed
+    ]
 
-    //
-    // SUBWORKFLOW: Influenza serotyping
-    //
-    if (!params.skip_influenza_serotyping) {
-        INFLUENZA_SEROTYPING(
-            ch_all_extracted_reads
-        )
-        ch_versions = ch_versions.mix(INFLUENZA_SEROTYPING.out.versions)
+    // Parse all segment BED files
+    ch_all_segments = Channel.empty()
+
+    influenza_bed_files.each { virus, bed_path ->
+        def ch_temp = Channel
+            .fromPath(bed_path)
+            .splitCsv(sep: '\t', header: false)
+            .map { row -> 
+                [
+                    virus: virus,
+                    accession: row[0],
+                    segment: row[3]
+                ]
+            }
+        
+        ch_all_segments = ch_all_segments.mix(ch_temp)
     }
 
+    
+    // Filter influenza samples and split by segments
+    ch_bam
+        .filter { meta, bam -> meta.genome in ['H1N1', 'H3N2', 'H5N1'] }
+        .join(ch_bai, by: [0])
+        .combine(ch_all_segments)
+        .filter { meta, bam, bai, segment_info ->
+            meta.genome == segment_info.virus
+        }
+        .map { meta, bam, bai, segment_info ->
+            def new_meta = meta.clone() + [
+                segment: segment_info.segment,
+                segment_accession: segment_info.accession
+            ]
+            [new_meta, bam, bai, segment_info.accession, segment_info.segment]
+        }
+        .set { ch_influenza_bam_for_split }
+    
 
+    SPLIT_BAM_BY_SEGMENT(ch_influenza_bam_for_split)
+    ch_influenza_split_bam = SPLIT_BAM_BY_SEGMENT.out.bam
+    
+    
     //
-    // BAM QC metrics ()duplicate marking if needed, coverage, etc.); RSV & SARS-CoV-2
+    // MODULE: Reheader segment BAMs to match segment-specific references
     //
-    ch_bam_metrics = ch_bam
+    
+    
+    // Prepare channel with BAM, BAI, and matching segment FASTA/FAI
+    ch_influenza_split_bam
+        .map { meta, bam -> 
+            def key = "${meta.genome}_${meta.segment}"
+            [key, meta, bam]
+        }
+        .join(
+            SPLIT_BAM_BY_SEGMENT.out.bai
+                .map { meta, bai -> 
+                    def key = "${meta.genome}_${meta.segment}"
+                    [key, meta, bai]
+                },
+            by: [0, 1]
+        )
+        .combine(
+            ch_all_segment_fasta
+                .map { ref_meta, fasta ->
+                    def key = "${ref_meta.virus}_${ref_meta.segment}"
+                    [key, fasta]
+                },
+            by: 0
+        )
+        .combine(
+            ch_all_segment_fai
+                .map { ref_meta, fai ->
+                    def key = "${ref_meta.virus}_${ref_meta.segment}"
+                    [key, fai]
+                },
+            by: 0
+        )
+        .map { key, meta, bam, bai, fasta, fai ->
+            [meta, bam, bai, fasta, fai]
+        }
+        .set { ch_segments_for_reheader }
+
+    REHEADER_SEGMENT_BAM(ch_segments_for_reheader)    
+    ch_versions = ch_versions.mix(REHEADER_SEGMENT_BAM.out.versions)
+
+    // Combine non-influenza BAMs with reheadered influenza segment BAMs
+    ch_bam_reheader = ch_bam
+        .filter { meta, bam -> 
+            // Keep only non-influenza samples (SARS-CoV-2, RSV-A, RSV-B)
+            !(meta.genome in ['H1N1', 'H3N2', 'H5N1'])
+        }
+        .mix(REHEADER_SEGMENT_BAM.out.bam)
+
+    // Similarly for BAI
+    ch_bai_reheader = ch_bai
+        .filter { meta, bai -> 
+            !(meta.genome in ['H1N1', 'H3N2', 'H5N1'])
+        }
+        .mix(REHEADER_SEGMENT_BAM.out.bai)
+
+    // For QC, use the same combined channels
+    ch_bam_for_qc = ch_bam_reheader
+    ch_bai_for_qc = ch_bai_reheader
+
+
+    // Run BAM QC with segment-specific references
     if (!params.skip_alignment && !params.skip_alignment_stats) {
         BAM_QC_METRICS(
-            ch_bam_metrics,
-            ch_bai,
+            ch_bam_for_qc,
+            ch_bai_for_qc,
             ch_sars_cov2_fasta,
             ch_sars_cov2_fai,
             ch_rsv_a_fasta,
             ch_rsv_a_fai,
             ch_rsv_b_fasta,
             ch_rsv_b_fai,
+            ch_all_segment_fasta,
+            ch_all_segment_fai
         )
         ch_versions = ch_versions.mix(BAM_QC_METRICS.out.versions)
 
-        // Update BAM channels after mark duplicates if performed
         if (!params.skip_markduplicates) {
-            ch_bam = BAM_QC_METRICS.out.bam
-            ch_bai = BAM_QC_METRICS.out.bai
+            // Update the reheadered channels with mark duplicates output
+            ch_bam_reheader = BAM_QC_METRICS.out.bam
+            ch_bai_reheader = BAM_QC_METRICS.out.bai
         }
     }
-
+    
     //
     // SUBWORKFLOW: Call variants with FreeBayes + iVar + LoFreq
     //
     if (!params.skip_variants) {
-        ch_variant_bam = ch_bam
+        ch_variant_bam = ch_bam_reheader
         ch_vcf = Channel.empty()
         ch_tbi = Channel.empty()
         ch_ivar_counts_multiqc = Channel.empty()
@@ -249,36 +434,39 @@ workflow WASTEFLOW {
             ch_rsv_b_snpeff_config,
         )
 
-        // Combine all variant calling outputs
+        // Combine all variant calling outputs for SARS-CoV-2, RSV-A, RSV-B, and influenza types
         ch_vcf = VARIANT_CALLING.out.sars_cov_2_vcf
             .mix(VARIANT_CALLING.out.rsv_a_vcf)
             .mix(VARIANT_CALLING.out.rsv_b_vcf)
+            
 
         ch_tbi = VARIANT_CALLING.out.sars_cov_2_tbi
             .mix(VARIANT_CALLING.out.rsv_a_tbi)
             .mix(VARIANT_CALLING.out.rsv_b_tbi)
+            
 
         ch_ivar_counts_multiqc = VARIANT_CALLING.out.sars_cov_2_ivar_counts_multiqc
             .mix(VARIANT_CALLING.out.rsv_a_ivar_counts_multiqc)
             .mix(VARIANT_CALLING.out.rsv_b_ivar_counts_multiqc)
+           
 
         ch_bcftools_stats_multiqc = VARIANT_CALLING.out.sars_cov_2_bcftools_stats_multiqc
             .mix(VARIANT_CALLING.out.rsv_a_bcftools_stats_multiqc)
             .mix(VARIANT_CALLING.out.rsv_b_bcftools_stats_multiqc)
-
+            
 
         ch_snpeff_multiqc = VARIANT_CALLING.out.sars_cov_2_snpeff_multiqc
             .mix(VARIANT_CALLING.out.rsv_a_snpeff_multiqc)
             .mix(VARIANT_CALLING.out.rsv_b_snpeff_multiqc)
+            
 
         ch_snpsift_txt = VARIANT_CALLING.out.sars_cov_2_snpsift_txt
             .mix(VARIANT_CALLING.out.rsv_a_snpsift_txt)
             .mix(VARIANT_CALLING.out.rsv_b_snpsift_txt)
+            
 
         ch_versions = ch_versions.mix(VARIANT_CALLING.out.versions)
     }
-
-
     //
     // SUBWORKFLOW: Freyja variant analysis
     //
