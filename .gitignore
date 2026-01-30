@@ -18,3 +18,5 @@ bin/archive/*
 adhoc_scripts/*
 */archive/*
 .params*
+*.error
+*.out
