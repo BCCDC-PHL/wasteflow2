@@ -12,6 +12,7 @@ include { paramsSummaryMultiqc    } from '../subworkflows/nf-core/utils_nfcore_p
 include { softwareVersionsToYAML  } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText  } from '../subworkflows/local/utils_nfcore_wasteflow2_pipeline'
 
+
 // Import subworkflows
 include { GENOME_PREPARATION      } from '../subworkflows/local/genome_preparation'
 include { READ_PROCESSING         } from '../subworkflows/local/read_processing'
@@ -31,6 +32,12 @@ include { BAM_TRIM_PRIMERS_IVAR   } from '../subworkflows/local/bam_trim_primers
 include { SPLIT_BAM_BY_SEGMENT     } from '../modules/local/split_bam_by_segment'
 include { REHEADER_SEGMENT_BAM } from '../modules/local/reheader_segment_bam'
 
+
+
+
+
+
+
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     RUN MAIN WORKFLOW
@@ -43,13 +50,66 @@ workflow WASTEFLOW {
 
     main:
 
+
+    if (params.metadata) {
+        // Parse metadata filter string into a map
+        def filter_map = [:]
+        if (params.metadata_filter) {
+            params.metadata_filter.split(/\s+/).each { pair ->
+                def parts = pair.split('=', 2)
+                if (parts.size() == 2) {
+                    filter_map[parts[0].trim()] = parts[1].trim()
+                }
+            }
+        }
+        
+        // Load and parse metadata with filtering
+        def metadata_map = Utils.loadMetadataWithFilters(
+            file(params.metadata),
+            filter_map,
+            log
+        )
+        
+        log.info "Filtering samples based on metadata file: ${params.metadata}"
+        
+        if (filter_map.size() > 0) {
+            def filter_list = filter_map.collect { k, v -> "${k}=${v}" }
+            log.info "Active filters: ${filter_list.join(', ')}"
+        } else {
+            log.info "No filters applied - including all samples from metadata that match sample IDs"
+        }
+        log.info "Found ${metadata_map.size()} samples matching filter criteria"
+        log.info "All samples will be processed through READ_PROCESSING and CONTROL_OLIGO_QC"
+        log.info "Filtering will be applied starting from TAXONOMY_CLASSIFICATION"
+        
+        // Create a closure that captures metadata_map
+        ch_filter_closure = { meta, fastqs ->
+            def normalized_id = meta.id
+                .replaceAll(/_S\d+$/, '')
+                .replaceAll('-', ' ')
+            
+            def should_process = metadata_map.containsKey(normalized_id)
+            
+            if (!should_process) {
+                log.debug "Filtering out sample: ${meta.id} (normalized: ${normalized_id})"
+            }
+            
+            return should_process
+        }
+        
+    } else {
+        log.info "No metadata file provided - processing all samples through entire pipeline"
+        ch_filter_closure = null
+    }
+
+      
     def pass_mapped_reads = [:]
     def fail_mapped_reads = [:]
 
     ch_versions = Channel.empty()
     ch_multiqc_files = Channel.empty()
     multiqc_report = Channel.empty()
-
+    
     //
     // SUBWORKFLOW: Prepare reference genomes
     //
@@ -158,7 +218,7 @@ workflow WASTEFLOW {
     ch_reads_qc = READ_PROCESSING.out.reads
     ch_reads_oligo = READ_PROCESSING.out.reads
 
-
+    
     //
     // SUBWORKFLOW: Control oligo QC
     //
@@ -177,8 +237,13 @@ workflow WASTEFLOW {
     //
     // SUBWORKFLOW: Taxonomy classification and target extraction
     //
+    if (params.metadata && ch_filter_closure != null) {
+        ch_reads_for_taxonomy = ch_reads_qc.filter(ch_filter_closure)
+    } else {
+        ch_reads_for_taxonomy = ch_reads_qc
+    }
     if (!params.skip_taxonomy_classification) {
-        TAXONOMY_CLASSIFICATION(ch_reads_qc)
+        TAXONOMY_CLASSIFICATION(ch_reads_for_taxonomy)
         ch_versions = ch_versions.mix(TAXONOMY_CLASSIFICATION.out.versions)
         ch_kraken2_multiqc = TAXONOMY_CLASSIFICATION.out.kraken2_multiqc
     }
@@ -190,13 +255,15 @@ workflow WASTEFLOW {
     //
     // SUBWORKFLOW: Influenza serotyping
     //
+    
+    influenza_serotype_reads = Channel.empty()
     if (!params.skip_influenza_serotyping) {
         INFLUENZA_SEROTYPING(
             ch_all_extracted_reads
         )
+        influenza_serotype_reads = INFLUENZA_SEROTYPING.out.serotype_reads
         ch_versions = ch_versions.mix(INFLUENZA_SEROTYPING.out.versions)
     }
-    influenza_serotype_reads = INFLUENZA_SEROTYPING.out.serotype_reads
     ch_all_extracted_reads = ch_all_extracted_reads.mix(influenza_serotype_reads)
     
     //
@@ -318,43 +385,117 @@ workflow WASTEFLOW {
     // MODULE: Reheader segment BAMs to match segment-specific references
     //
     
+    // Sort all channels deterministically for reproducible matching
+    ch_all_segment_fasta
+        .toSortedList { a, b -> 
+            def keyA = "${a[0].virus}_${a[0].segment}"
+            def keyB = "${b[0].virus}_${b[0].segment}"
+            keyA <=> keyB
+        }
+        .flatMap { it }
+        .set { ch_sorted_segment_fasta }
     
-    // Prepare channel with BAM, BAI, and matching segment FASTA/FAI
+    ch_all_segment_fai
+        .toSortedList { a, b -> 
+            def keyA = "${a[0].virus}_${a[0].segment}"
+            def keyB = "${b[0].virus}_${b[0].segment}"
+            keyA <=> keyB
+        }
+        .flatMap { it }
+        .set { ch_sorted_segment_fai }
+    
+    // Sort split BAM outputs deterministically
     ch_influenza_split_bam
-        .map { meta, bam -> 
-            def key = "${meta.genome}_${meta.segment}"
-            [key, meta, bam]
+        .toSortedList { a, b ->
+            def keyA = "${a[0].id}_${a[0].genome}_${a[0].segment}"
+            def keyB = "${b[0].id}_${b[0].genome}_${b[0].segment}"
+            keyA <=> keyB
         }
-        .join(
-            SPLIT_BAM_BY_SEGMENT.out.bai
-                .map { meta, bai -> 
-                    def key = "${meta.genome}_${meta.segment}"
-                    [key, meta, bai]
-                },
-            by: [0, 1]
-        )
-        .combine(
-            ch_all_segment_fasta
-                .map { ref_meta, fasta ->
-                    def key = "${ref_meta.virus}_${ref_meta.segment}"
-                    [key, fasta]
-                },
-            by: 0
-        )
-        .combine(
-            ch_all_segment_fai
-                .map { ref_meta, fai ->
-                    def key = "${ref_meta.virus}_${ref_meta.segment}"
-                    [key, fai]
-                },
-            by: 0
-        )
-        .map { key, meta, bam, bai, fasta, fai ->
-            [meta, bam, bai, fasta, fai]
+        .flatMap { it }
+        .set { ch_sorted_split_bam }
+    
+    SPLIT_BAM_BY_SEGMENT.out.bai
+        .toSortedList { a, b ->
+            def keyA = "${a[0].id}_${a[0].genome}_${a[0].segment}"
+            def keyB = "${b[0].id}_${b[0].genome}_${b[0].segment}"
+            keyA <=> keyB
         }
-        .set { ch_segments_for_reheader }
+        .flatMap { it }
+        .set { ch_sorted_split_bai }
+    
+    // Create deterministic reference pairs [ref_meta, fasta, fai]
+    ch_sorted_segment_fasta
+        .combine(ch_sorted_segment_fai)
+        .filter { fasta_meta, fasta, fai_meta, fai ->
+            fasta_meta.virus == fai_meta.virus && fasta_meta.segment == fai_meta.segment
+        }
+        .map { fasta_meta, fasta, fai_meta, fai ->
+            [fasta_meta, fasta, fai]
+        }
+        .set { ch_segment_refs }
+    
+    // Match BAM with BAI
+    ch_sorted_split_bam
+        .combine(ch_sorted_split_bai)
+        .filter { bam_meta, bam, bai_meta, bai ->
+            bam_meta.id == bai_meta.id && 
+            bam_meta.genome == bai_meta.genome && 
+            bam_meta.segment == bai_meta.segment
+        }
+        .map { bam_meta, bam, bai_meta, bai ->
+            [bam_meta, bam, bai]
+        }
+        .set { ch_bam_bai_pairs }
+    
+    // Match with segment references
+    ch_bam_bai_pairs
+        .combine(ch_segment_refs)
+        .filter { bam_meta, bam, bai, ref_meta, fasta, fai ->
+            bam_meta.genome == ref_meta.virus && bam_meta.segment == ref_meta.segment
+        }
+        .map { bam_meta, bam, bai, ref_meta, fasta, fai ->
+            // Extract segment accession as a simple value
+            def seg_acc = bam_meta.segment_accession ?: bam_meta.segment
+            
+            // Return tuple with all inputs
+            tuple(bam_meta, bam, bai, fasta, fai, seg_acc)
+        }
+        .multiMap { meta, bam, bai, fasta, fai, seg_acc ->
+            tuple_input: tuple(meta, bam, bai, fasta, fai)
+            seg_acc: seg_acc  // This will now be a clean scalar value
+        }
+        .set { ch_reheader_inputs }
 
-    REHEADER_SEGMENT_BAM(ch_segments_for_reheader)    
+    // DEBUG: Check input consistency
+    /*
+    ch_reheader_inputs.tuple_input
+        .take(5)
+        .view { meta, bam, bai, fasta, fai ->
+            """
+            ═══════════════════════════════════════════
+            REHEADER INPUT DEBUG:
+            Sample: ${meta.id}
+            Genome: ${meta.genome}
+            Segment: ${meta.segment}
+            Seg_Acc: ${meta.segment_accession}
+            BAM: ${bam.name} (${bam.size()} bytes)
+            BAI: ${bai.name} (${bai.size()} bytes)
+            FASTA: ${fasta.name} (${fasta.size()} bytes)
+            FAI: ${fai.name} (${fai.size()} bytes)
+            ═══════════════════════════════════════════
+            """.stripIndent()
+        }   
+    */
+
+    ch_reheader_inputs.seg_acc
+        .take(5)
+        .view { "DEBUG seg_acc value: $it (type: ${it.class.name})" }  // Better debug
+        
+    REHEADER_SEGMENT_BAM(
+        ch_reheader_inputs.tuple_input,
+        ch_reheader_inputs.seg_acc
+    )
+
     ch_versions = ch_versions.mix(REHEADER_SEGMENT_BAM.out.versions)
 
     // Combine non-influenza BAMs with reheadered influenza segment BAMs
@@ -403,70 +544,41 @@ workflow WASTEFLOW {
     //
     // SUBWORKFLOW: Call variants with FreeBayes + iVar + LoFreq
     //
+    ch_variant_bam = ch_bam_reheader
+    ch_vcf = Channel.empty()
+    ch_tbi = Channel.empty()
+    ch_ivar_counts_multiqc = Channel.empty()
+    ch_bcftools_stats_multiqc = Channel.empty()
     if (!params.skip_variants) {
-        ch_variant_bam = ch_bam_reheader
-        ch_vcf = Channel.empty()
-        ch_tbi = Channel.empty()
-        ch_ivar_counts_multiqc = Channel.empty()
-        ch_bcftools_stats_multiqc = Channel.empty()
-        ch_snpsift_txt = Channel.empty()
-        ch_snpeff_multiqc = Channel.empty()
-
         VARIANT_CALLING(
             ch_variant_bam,
             ch_sars_cov2_fasta,
             ch_sars_cov2_fai,
             ch_sars_cov2_chrom_sizes,
             ch_sars_cov2_gff,
-            ch_sars_cov2_snpeff_db,
-            ch_sars_cov2_snpeff_config,
             ch_rsv_a_fasta,
             ch_rsv_a_fai,
             ch_rsv_a_chrom_sizes,
             ch_rsv_a_gff,
-            ch_rsv_a_snpeff_db,
-            ch_rsv_a_snpeff_config,
             ch_rsv_b_fasta,
             ch_rsv_b_fai,
             ch_rsv_b_chrom_sizes,
             ch_rsv_b_gff,
-            ch_rsv_b_snpeff_db,
-            ch_rsv_b_snpeff_config,
-        )
-
-        // Combine all variant calling outputs for SARS-CoV-2, RSV-A, RSV-B, and influenza types
-        ch_vcf = VARIANT_CALLING.out.sars_cov_2_vcf
-            .mix(VARIANT_CALLING.out.rsv_a_vcf)
-            .mix(VARIANT_CALLING.out.rsv_b_vcf)
-            
-
-        ch_tbi = VARIANT_CALLING.out.sars_cov_2_tbi
-            .mix(VARIANT_CALLING.out.rsv_a_tbi)
-            .mix(VARIANT_CALLING.out.rsv_b_tbi)
-            
-
-        ch_ivar_counts_multiqc = VARIANT_CALLING.out.sars_cov_2_ivar_counts_multiqc
-            .mix(VARIANT_CALLING.out.rsv_a_ivar_counts_multiqc)
-            .mix(VARIANT_CALLING.out.rsv_b_ivar_counts_multiqc)
-           
-
-        ch_bcftools_stats_multiqc = VARIANT_CALLING.out.sars_cov_2_bcftools_stats_multiqc
-            .mix(VARIANT_CALLING.out.rsv_a_bcftools_stats_multiqc)
-            .mix(VARIANT_CALLING.out.rsv_b_bcftools_stats_multiqc)
-            
-
-        ch_snpeff_multiqc = VARIANT_CALLING.out.sars_cov_2_snpeff_multiqc
-            .mix(VARIANT_CALLING.out.rsv_a_snpeff_multiqc)
-            .mix(VARIANT_CALLING.out.rsv_b_snpeff_multiqc)
-            
-
-        ch_snpsift_txt = VARIANT_CALLING.out.sars_cov_2_snpsift_txt
-            .mix(VARIANT_CALLING.out.rsv_a_snpsift_txt)
-            .mix(VARIANT_CALLING.out.rsv_b_snpsift_txt)
-            
+            ch_all_segment_fasta,
+            ch_all_segment_fai,
+            ch_all_segment_chrom_sizes,
+            ch_all_segment_gff,
+        )            
 
         ch_versions = ch_versions.mix(VARIANT_CALLING.out.versions)
     }
+
+    ch_vcf = VARIANT_CALLING.out.vcf
+    ch_tbi = VARIANT_CALLING.out.tbi
+    ch_ivar_counts_multiqc = VARIANT_CALLING.out.ivar_counts_multiqc
+    ch_bcftools_stats_multiqc = VARIANT_CALLING.out.bcftools_stats
+
+    
     //
     // SUBWORKFLOW: Freyja variant analysis
     //
@@ -548,7 +660,7 @@ workflow WASTEFLOW {
         multiqc_report = MULTIQC.out.report.toList()
         ch_versions = ch_versions.mix(MULTIQC.out.versions)
     }
-
+    
     emit:
     multiqc_report // channel: /path/to/multiqc_report.html
     versions       = ch_versions // channel: [ path(versions.yml) ]

@@ -6,7 +6,6 @@ include { IVAR_VARIANTS        } from '../../modules/nf-core/ivar/variants/main'
 include { IVAR_VARIANTS_TO_VCF } from '../../modules/local/ivar_variants_to_vcf'
 include { BCFTOOLS_SORT        } from '../../modules/nf-core/bcftools/sort/main'
 include { VCF_TABIX_STATS      } from './vcf_tabix_stats'
-include { VARIANTS_QC          } from './variants_qc'
 
 workflow VARIANTS_IVAR {
     take:
@@ -15,8 +14,6 @@ workflow VARIANTS_IVAR {
     fai                 // channel: /path/to/genome.fai
     sizes               // channel: /path/to/genome.sizes
     gff                 // channel: /path/to/genome.gff
-    snpeff_db           // channel: /path/to/snpeff_db/
-    snpeff_config       // channel: /path/to/snpeff.config
     ivar_multiqc_header // channel: /path/to/multiqc_header for ivar variants
 
     main:
@@ -35,15 +32,52 @@ workflow VARIANTS_IVAR {
     )
     ch_versions = ch_versions.mix(IVAR_VARIANTS.out.versions.first())
 
-    // Filter out samples with 0 variants
-    IVAR_VARIANTS.out.tsv.filter { meta, tsv -> WorkflowCommons.getNumLinesInFile(tsv) > 1 }.set { ch_ivar_tsv }
+
+    IVAR_VARIANTS.out.tsv
+    .branch { meta, tsv ->
+        pass: WorkflowCommons.getNumLinesInFile(tsv) > 1
+            return [meta, tsv]
+        fail: true
+            return [meta, tsv]
+    }
+    .set { ch_ivar_tsv_branched }
+
+    // Use the passing samples for downstream processing
+    def ch_ivar_tsv = ch_ivar_tsv_branched.pass
+
+    // For segmented genomes, use the matched_fasta from meta
+    // For non-segmented genomes, pair with the broadcast fasta
+    ch_ivar_tsv
+        .branch { meta, tsv ->
+            segmented: meta.containsKey('matched_fasta')
+                return [meta, tsv, meta.matched_fasta]
+            full_genome: true
+                return [meta, tsv]
+        }
+        .set { ch_tsv_branched }
+
+    // For full genomes, add the broadcast fasta
+    ch_tsv_branched.full_genome
+        .combine(fasta.map { it })  
+        .map { meta, tsv, fa ->
+            [meta, tsv, fa]
+        }
+        .set { ch_full_genome_with_fasta }
+
+    // Combine both branches
+    ch_tsv_branched.segmented
+        .mix(ch_full_genome_with_fasta)
+        .map { meta, tsv, fa ->
+            [meta, tsv, fa]
+        }
+        .set { ch_tsv_fasta_matched }
 
     //
     // Convert original iVar output to VCF, zip and index
     //
     IVAR_VARIANTS_TO_VCF(
-        ch_ivar_tsv,
-        fasta,
+        ch_tsv_fasta_matched.map { meta, tsv, fa -> [meta, tsv] },
+        ch_tsv_fasta_matched.map { meta, tsv, fa -> fa },
         ivar_multiqc_header,
     )
     ch_versions = ch_versions.mix(IVAR_VARIANTS_TO_VCF.out.versions.first())
@@ -61,21 +95,6 @@ workflow VARIANTS_IVAR {
     )
     ch_versions = ch_versions.mix(VCF_TABIX_STATS.out.versions)
 
-    //
-    // Run downstream tools for variants QC
-    //
-    VARIANTS_QC(
-        bam,
-        BCFTOOLS_SORT.out.vcf,
-        VCF_TABIX_STATS.out.stats,
-        fasta,
-        sizes,
-        gff,
-        snpeff_db,
-        snpeff_config,
-    )
-    ch_versions = ch_versions.mix(VARIANTS_QC.out.versions)
-
     emit:
     tsv          = ch_ivar_tsv // channel: [ val(meta), [ tsv ] ]
     vcf_orig     = IVAR_VARIANTS_TO_VCF.out.vcf // channel: [ val(meta), [ vcf ] ]
@@ -85,12 +104,5 @@ workflow VARIANTS_IVAR {
     tbi          = VCF_TABIX_STATS.out.tbi // channel: [ val(meta), [ tbi ] ]
     csi          = VCF_TABIX_STATS.out.csi // channel: [ val(meta), [ csi ] ]
     stats        = VCF_TABIX_STATS.out.stats // channel: [ val(meta), [ txt ] ]
-    snpeff_vcf   = VARIANTS_QC.out.snpeff_vcf // channel: [ val(meta), [ vcf.gz ] ]
-    snpeff_tbi   = VARIANTS_QC.out.snpeff_tbi // channel: [ val(meta), [ tbi ] ]
-    snpeff_stats = VARIANTS_QC.out.snpeff_stats // channel: [ val(meta), [ txt ] ]
-    snpeff_csv   = VARIANTS_QC.out.snpeff_csv // channel: [ val(meta), [ csv ] ]
-    snpeff_txt   = VARIANTS_QC.out.snpeff_txt // channel: [ val(meta), [ txt ] ]
-    snpeff_html  = VARIANTS_QC.out.snpeff_html // channel: [ val(meta), [ html ] ]
-    snpsift_txt  = VARIANTS_QC.out.snpsift_txt // channel: [ val(meta), [ txt ] ]
     versions     = ch_versions // channel: [ versions.yml ]
 }
