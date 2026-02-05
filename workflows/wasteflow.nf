@@ -23,6 +23,7 @@ include { VARIANT_CALLING         } from '../subworkflows/local/variant_calling'
 include { FREYJA_ANALYSIS         } from '../subworkflows/local/freyja_analysis'
 include { INFLUENZA_SEROTYPING    } from '../subworkflows/local/influenza_serotyping'
 include { CONTROL_OLIGO_QC        } from '../subworkflows/local/control_oligo_qc'
+include { VARIANTS_QC             } from '../subworkflows/local/variants_qc'
 
 // Import remaining modules
 include { MULTIQC                 } from '../modules/nf-core/multiqc/main'
@@ -199,14 +200,74 @@ workflow WASTEFLOW {
     ch_all_segment_chrom_sizes = ch_h1n1_segment_chrom_sizes
         .mix(ch_h3n2_segment_chrom_sizes)
         .mix(ch_h5n1_segment_chrom_sizes)
-    
+
     ch_all_segment_snpeff_db = ch_h1n1_segment_snpeff_db
         .mix(ch_h3n2_segment_snpeff_db)
         .mix(ch_h5n1_segment_snpeff_db)
-    
+
     ch_all_segment_snpeff_config = ch_h1n1_segment_snpeff_config
         .mix(ch_h3n2_segment_snpeff_config)
         .mix(ch_h5n1_segment_snpeff_config)
+    
+    // SARS-CoV-2
+    // Remove the .map() - the channel is already [meta, db]
+    ch_sars_cov2_snpeff_db_meta = GENOME_PREPARATION.out.sars_cov2_snpeff_db
+    ch_sars_cov2_snpeff_config_meta = GENOME_PREPARATION.out.sars_cov2_snpeff_config    
+    ch_sars_cov2_fasta_meta = GENOME_PREPARATION.out.sars_cov2_fasta
+        .map { fasta -> [[genome: 'MN908947.3'], fasta] }  // This one still needs wrapping
+
+    // Same for RSV-A
+    ch_rsv_a_snpeff_db_meta = GENOME_PREPARATION.out.rsv_a_snpeff_db
+    ch_rsv_a_snpeff_config_meta = GENOME_PREPARATION.out.rsv_a_snpeff_config
+    ch_rsv_a_fasta_meta = GENOME_PREPARATION.out.rsv_a_fasta
+        .map { fasta -> [[genome: 'PP109421.1'], fasta] }
+
+    // Same for RSV-B
+    ch_rsv_b_snpeff_db_meta = GENOME_PREPARATION.out.rsv_b_snpeff_db
+    ch_rsv_b_snpeff_config_meta = GENOME_PREPARATION.out.rsv_b_snpeff_config
+    ch_rsv_b_fasta_meta = GENOME_PREPARATION.out.rsv_b_fasta
+        .map { fasta -> [[genome: 'OP975389.1'], fasta] }
+    
+    //
+    // Step 2: Normalize segment SnpEff DBs (change 'virus' to 'genome' in meta)
+    //
+    
+    // The segment channels have meta: [virus: 'H1N1', segment: 'PB2', id: 'H1N1_PB2']
+    // We need to normalize to: [genome: 'H1N1', segment: 'PB2']
+    
+    ch_all_segment_snpeff_db_normalized = ch_all_segment_snpeff_db
+        .map { meta, db -> 
+            [[genome: meta.virus, segment: meta.segment], db]
+        }
+    
+    ch_all_segment_snpeff_config_normalized = ch_all_segment_snpeff_config
+        .map { meta, config -> 
+            [[genome: meta.virus, segment: meta.segment], config]
+        }
+    
+    ch_all_segment_fasta_normalized = ch_all_segment_fasta
+        .map { meta, fasta ->
+            [[genome: meta.virus, segment: meta.segment], fasta]
+        }
+    
+    //
+    // Step 3: Mix all SnpEff DBs into unified channels
+    //
+    
+    ch_all_snpeff_db_unified = ch_all_segment_snpeff_db_normalized
+        .mix(ch_sars_cov2_snpeff_db_meta)
+        .mix(ch_rsv_a_snpeff_db_meta)
+        .mix(ch_rsv_b_snpeff_db_meta)
+    
+    ch_all_snpeff_config_unified = ch_all_segment_snpeff_config_normalized
+        .mix(ch_sars_cov2_snpeff_config_meta)
+        .mix(ch_rsv_a_snpeff_config_meta)
+        .mix(ch_rsv_b_snpeff_config_meta)
+    
+    ch_all_fasta_unified = ch_all_segment_fasta_normalized
+        .mix(ch_sars_cov2_fasta_meta)
+        .mix(ch_rsv_a_fasta_meta)
+        .mix(ch_rsv_b_fasta_meta)
 
     //
     // SUBWORKFLOW: Process reads (QC, trim)
@@ -486,10 +547,6 @@ workflow WASTEFLOW {
             """.stripIndent()
         }   
     */
-
-    ch_reheader_inputs.seg_acc
-        .take(5)
-        .view { "DEBUG seg_acc value: $it (type: ${it.class.name})" }  // Better debug
         
     REHEADER_SEGMENT_BAM(
         ch_reheader_inputs.tuple_input,
@@ -578,7 +635,13 @@ workflow WASTEFLOW {
     ch_ivar_counts_multiqc = VARIANT_CALLING.out.ivar_counts_multiqc
     ch_bcftools_stats_multiqc = VARIANT_CALLING.out.bcftools_stats
 
-    
+    VARIANTS_QC(
+        ch_vcf,
+        ch_all_snpeff_db_unified,         
+        ch_all_snpeff_config_unified,     
+        ch_all_fasta_unified              
+    )
+
     //
     // SUBWORKFLOW: Freyja variant analysis
     //

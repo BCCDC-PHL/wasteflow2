@@ -1,167 +1,4 @@
-//
-// Uncompress and prepare reference genome files
-//
-/*
-include { GUNZIP as GUNZIP_FASTA        } from '../../modules/nf-core/gunzip/main'
-include { GUNZIP as GUNZIP_GFF          } from '../../modules/nf-core/gunzip/main'
-include { GUNZIP as GUNZIP_PRIMER_BED   } from '../../modules/nf-core/gunzip/main'
-include { GUNZIP as GUNZIP_PRIMER_FASTA } from '../../modules/nf-core/gunzip/main'
-include { UNTAR as UNTAR_BOWTIE2_INDEX  } from '../../modules/nf-core/untar/main'
-include { UNTAR as UNTAR_NEXTCLADE_DB   } from '../../modules/nf-core/untar/main'
-include { UNTAR as UNTAR_BLAST_DB       } from '../../modules/nf-core/untar/main'
-include { BOWTIE2_BUILD                 } from '../../modules/nf-core/bowtie2/build/main'
 
-include { BLAST_MAKEBLASTDB             } from '../../modules/nf-core/blast/makeblastdb/main'
-include { BEDTOOLS_GETFASTA             } from '../../modules/nf-core/bedtools/getfasta/main'
-include { CUSTOM_GETCHROMSIZES          } from '../../modules/nf-core/custom/getchromsizes/main'
-include { CUSTOM_GETCHROMSIZES as CUSTOM_GETCHROMSIZES_SEGMENTS } from '../../modules/nf-core/custom/getchromsizes/main'
-
-include { NEXTCLADE_DATASETGET          } from '../../modules/nf-core/nextclade/datasetget/main'
-include { COLLAPSE_PRIMERS              } from '../../modules/local/collapse_primers'
-include { SNPEFF_BUILD                  } from '../../modules/local/snpeff_build'
-include { SNPEFF_BUILD as SNPEFF_BUILD_SEGMENT } from '../../modules/local/snpeff_build'
-
-// New imports for segment handling
-include { SPLIT_FASTA_BY_SEGMENT        } from '../../modules/local/split_fasta_by_segment'
-include { SPLIT_GFF_BY_SEGMENT          } from '../../modules/local/split_gff_by_segment'
-
-
-
-workflow PREPARE_GENOME {
-    take:
-    fasta
-    gff
-    primer_bed
-    bowtie2_index
-    nextclade_dataset
-    nextclade_dataset_name
-    nextclade_dataset_tag
-
-    main:
-
-    ch_versions = Channel.empty()
-
-    //
-    // Uncompress genome fasta file if required
-    //
-    if (fasta.endsWith('.gz')) {
-        GUNZIP_FASTA(
-            [[:], fasta]
-        )
-        ch_fasta = GUNZIP_FASTA.out.gunzip.map { it[1] }
-        ch_versions = ch_versions.mix(GUNZIP_FASTA.out.versions)
-    }
-    else {
-        ch_fasta = Channel.value(file(fasta))
-    }
-
-    //
-    // Uncompress GFF annotation file
-    //
-    ch_gff = Channel.empty()
-    if (gff) {
-        if (gff.endsWith('.gz')) {
-            GUNZIP_GFF(
-                [[:], gff]
-            )
-            ch_gff = GUNZIP_GFF.out.gunzip.map { it[1] }
-            ch_versions = ch_versions.mix(GUNZIP_GFF.out.versions)
-        }
-        else {
-            ch_gff = Channel.value(file(gff))
-        }
-    }
-
-    //
-    // Create chromosome sizes file
-    //
-    CUSTOM_GETCHROMSIZES(
-        ch_fasta.map { [[:], it] }
-    )
-    ch_fai = CUSTOM_GETCHROMSIZES.out.fai.map { it[1] }
-    ch_chrom_sizes = CUSTOM_GETCHROMSIZES.out.sizes.map { it[1] }
-    ch_versions = ch_versions.mix(CUSTOM_GETCHROMSIZES.out.versions)
-
-
-    //
-    // Prepare reference files required for Alignment
-    //
-    ch_bowtie2_index = Channel.empty()
-    if (bowtie2_index) {
-        if (bowtie2_index.endsWith('.tar.gz')) {
-            UNTAR_BOWTIE2_INDEX(
-                [[:], file(bowtie2_index)]
-            )
-            ch_bowtie2_index = UNTAR_BOWTIE2_INDEX.out.untar
-            ch_versions = ch_versions.mix(UNTAR_BOWTIE2_INDEX.out.versions)
-        }
-        else {
-            ch_bowtie2_index = [[:], file(bowtie2_index)]
-        }
-    }
-    else {
-        BOWTIE2_BUILD(
-            ch_fasta.map { [[:], it] }
-        )
-        ch_bowtie2_index = BOWTIE2_BUILD.out.index
-        ch_versions = ch_versions.mix(BOWTIE2_BUILD.out.versions)
-    }
-
-
-    //
-    // Prepare Nextclade dataset
-    //
-    ch_nextclade_db = Channel.empty()
-    if (!params.skip_nextclade) {
-        if (nextclade_dataset) {
-            if (nextclade_dataset.endsWith('.tar.gz')) {
-                UNTAR_NEXTCLADE_DB(
-                    [[:], nextclade_dataset]
-                )
-                ch_nextclade_db = UNTAR_NEXTCLADE_DB.out.untar.map { it[1] }
-                ch_versions = ch_versions.mix(UNTAR_NEXTCLADE_DB.out.versions)
-            }
-            else {
-                ch_nextclade_db = Channel.value(file(nextclade_dataset))
-            }
-        }
-        else if (nextclade_dataset_name) {
-            NEXTCLADE_DATASETGET(
-                nextclade_dataset_name,
-                nextclade_dataset_tag,
-            )
-            ch_nextclade_db = NEXTCLADE_DATASETGET.out.dataset
-            ch_versions = ch_versions.mix(NEXTCLADE_DATASETGET.out.versions)
-        }
-    }
-
-    //
-    // Make snpEff database
-    //
-    ch_snpeff_db = Channel.empty()
-    ch_snpeff_config = Channel.empty()
-    if (!params.skip_snpeff) {
-        SNPEFF_BUILD(
-            ch_fasta,
-            ch_gff,
-        )
-        ch_snpeff_db = SNPEFF_BUILD.out.db
-        ch_snpeff_config = SNPEFF_BUILD.out.config
-        ch_versions = ch_versions.mix(SNPEFF_BUILD.out.versions)
-    }
-
-    emit:
-    fasta         = ch_fasta // path: genome.fasta
-    gff           = ch_gff // path: genome.gff
-    fai           = ch_fai // path: genome.fai
-    chrom_sizes   = ch_chrom_sizes // path: genome.sizes
-    bowtie2_index = ch_bowtie2_index // channel: [ [:], bowtie2/index/ ]
-    nextclade_db  = ch_nextclade_db // path: nextclade_db
-    snpeff_db     = ch_snpeff_db // path: snpeff_db
-    snpeff_config = ch_snpeff_config // path: snpeff.config
-    versions      = ch_versions // channel: [ versions.yml ]
-}
-*/
 
 include { GUNZIP as GUNZIP_FASTA        } from '../../modules/nf-core/gunzip/main'
 include { GUNZIP as GUNZIP_GFF          } from '../../modules/nf-core/gunzip/main'
@@ -341,19 +178,42 @@ workflow PREPARE_GENOME {
         ch_chrom_sizes_segments = CUSTOM_GETCHROMSIZES_SEGMENTS.out.sizes
         ch_versions = ch_versions.mix(CUSTOM_GETCHROMSIZES_SEGMENTS.out.versions)
 
-        // Step 6: Build SnpEff databases for segments (reusing SNPEFF_BUILD)
+        // Step 6: Build SnpEff databases for segments
         if (!params.skip_snpeff && segment_gffs) {
-            ch_fasta_gff_segments = ch_fasta_segments
-                .join(ch_gff_segments, by: [0])
+            // Create join keys
+            ch_fasta_keyed = ch_fasta_segments
+                .map { meta, fasta_file ->
+                    def key = "${meta.virus}_${meta.segment}"  // Simple string key
+                    [key, meta, fasta_file]
+                }
+            
+            ch_gff_keyed = ch_gff_segments
+                .map { meta, gff_file ->
+                    def key = "${meta.virus}_${meta.segment}"  // Must match!
+                    [key, meta, gff_file]
+                }
 
+            // Join by key to ensure correct pairing
+            ch_joined = ch_fasta_keyed
+                .join(ch_gff_keyed, by: 0)  // Join on the string key
+                .map { key, meta_fasta, fasta_file, meta_gff, gff_file ->
+                    // Add genome field and emit single tuple
+                    def updated_meta = meta_fasta + [genome: meta_fasta.virus]
+                    [updated_meta, fasta_file, gff_file]
+                }
+
+
+            // Now pass SINGLE channel with both files to process
             SNPEFF_BUILD_SEGMENTS(
-                ch_fasta_gff_segments.map { meta, fasta_file, gff_file -> fasta_file },
-                ch_fasta_gff_segments.map { meta, fasta_file, gff_file -> gff_file }
+                ch_joined.map { meta, fasta_file, gff_file -> [meta, fasta_file] },
+                ch_joined.map { meta, fasta_file, gff_file -> [meta, gff_file] }
             )
             
+            // Outputs automatically preserve meta structure
             ch_snpeff_db_segments = SNPEFF_BUILD_SEGMENTS.out.db
             ch_snpeff_config_segments = SNPEFF_BUILD_SEGMENTS.out.config
-            ch_versions = ch_versions.mix(SNPEFF_BUILD_SEGMENTS.out.versions.first())
+            
+            ch_versions = ch_versions.mix(SNPEFF_BUILD_SEGMENTS.out.versions)
         }
 
     } else {
@@ -419,12 +279,20 @@ workflow PREPARE_GENOME {
             }
         }
 
-        // Make snpEff database
+        // Make snpEff database for non-segmented genomes
         if (!params.skip_snpeff && gff) {
-            SNPEFF_BUILD(
-                ch_fasta_to_process.map { meta, fasta_file -> fasta_file },
-                ch_gff_to_process.map { meta, gff_file -> gff_file },
-            )
+            // Create meta-keyed channels
+            ch_fasta_meta = ch_fasta_input.map { fasta_file -> 
+                [[id: virus_name, genome: virus_name, segment: 'none'], fasta_file]
+            }
+
+            ch_gff_meta = ch_gff_input.map { gff_file -> 
+                [[id: virus_name, genome: virus_name, segment: 'none'], gff_file]
+            }
+            
+            
+            SNPEFF_BUILD(ch_fasta_meta, ch_gff_meta)
+            
             ch_snpeff_db = SNPEFF_BUILD.out.db
             ch_snpeff_config = SNPEFF_BUILD.out.config
             ch_versions = ch_versions.mix(SNPEFF_BUILD.out.versions)
@@ -447,8 +315,8 @@ workflow PREPARE_GENOME {
     segment_gff          = ch_gff_segments             // channel: [ [meta], segment.gff ]
     segment_fai          = ch_fai_segments             // channel: [ [meta], segment.fai ]
     segment_chrom_sizes  = ch_chrom_sizes_segments     // channel: [ [meta], segment.sizes ]
-    segment_snpeff_db    = ch_snpeff_db_segments       // channel: [ path ]
-    segment_snpeff_config = ch_snpeff_config_segments  // channel: [ path ]
+    segment_snpeff_db    = ch_snpeff_db_segments       // channel: [ [meta], snpeff_db ]
+    segment_snpeff_config = ch_snpeff_config_segments  // channel: [ [meta], snpeff.config ]
     
     versions      = ch_versions                    // channel: [ versions.yml ]
 }
