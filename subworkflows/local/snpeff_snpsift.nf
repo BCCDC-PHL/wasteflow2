@@ -1,31 +1,22 @@
-//
-// Run snpEff, bgzip, tabix, stats and SnpSift commands
-//
-
 include { SNPEFF_ANN            } from '../../modules/local/snpeff_ann'
 include { SNPSIFT_EXTRACTFIELDS } from '../../modules/local/snpsift_extractfields'
-
 include { VCF_BGZIP_TABIX_STATS } from './vcf_bgzip_tabix_stats'
 
 workflow SNPEFF_SNPSIFT {
     take:
-    vcf    // channel: [ val(meta), [ vcf ] ]
-    db     // path   : snpEff database
-    config // path   : snpEff config
-    fasta  // path   : genome.fasta
+    vcf_with_refs // channel: [ val(meta), vcf, snpeff_db, snpeff_config, fasta ]
 
     main:
 
-    ch_versions = Channel.empty()
+    ch_versions = channel.empty()
 
-    SNPEFF_ANN(
-        vcf,
-        db,
-        config,
-        fasta,
-    )
+  
+
+    // Call SNPEFF_ANN with renamed files
+    SNPEFF_ANN(vcf_with_refs)
     ch_versions = ch_versions.mix(SNPEFF_ANN.out.versions.first())
 
+    // Compress, index, and stats
     VCF_BGZIP_TABIX_STATS(
         SNPEFF_ANN.out.vcf,
         [[:], []],
@@ -34,6 +25,7 @@ workflow SNPEFF_SNPSIFT {
     )
     ch_versions = ch_versions.mix(VCF_BGZIP_TABIX_STATS.out.versions)
 
+    // Extract fields with SnpSift
     SNPSIFT_EXTRACTFIELDS(
         VCF_BGZIP_TABIX_STATS.out.vcf
     )

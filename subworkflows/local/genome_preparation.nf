@@ -16,7 +16,7 @@ workflow GENOME_PREPARATION {
 
     // SARS-CoV-2 genome preparation (non-segmented, but has BED for genes)
     PREPARE_GENOME_SARS_COV2(
-        'SARS-CoV-2',
+        'MN908947.3',
         params.genomes['MN908947.3'].fasta,
         params.genomes['MN908947.3'].gff,
         null,                                                    // primer_bed
@@ -30,7 +30,7 @@ workflow GENOME_PREPARATION {
 
     // RSV-B genome preparation (non-segmented, but has BED for genes)
     PREPARE_GENOME_RSV_B(
-        'RSV-B',
+        'OP975389.1',
         params.genomes['OP975389.1'].fasta,
         params.genomes['OP975389.1'].gff,
         null,                                                    // primer_bed
@@ -44,7 +44,7 @@ workflow GENOME_PREPARATION {
 
     // RSV-A genome preparation (non-segmented, but has BED for genes)
     PREPARE_GENOME_RSV_A(
-        'RSV-A',
+        'PP109421.1',
         params.genomes['PP109421.1'].fasta,
         params.genomes['PP109421.1'].gff,
         null,                                                    // primer_bed
