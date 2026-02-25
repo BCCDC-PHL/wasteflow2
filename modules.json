@@ -235,6 +235,11 @@
                         "git_sha": "41dfa3f7c0ffabb96a6a813fe321c6d1cc5b6e46",
                         "installed_by": ["modules"]
                     },
+                    "seqkit/replace": {
+                        "branch": "master",
+                        "git_sha": "2eccc519c7d25e24c8ef2a5a94062630b8383daf",
+                        "installed_by": ["modules"]
+                    },
                     "seqkit/stats": {
                         "branch": "master",
                         "git_sha": "41dfa3f7c0ffabb96a6a813fe321c6d1cc5b6e46",
