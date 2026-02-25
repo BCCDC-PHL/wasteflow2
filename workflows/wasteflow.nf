@@ -527,26 +527,6 @@ workflow WASTEFLOW {
         }
         .set { ch_reheader_inputs }
 
-    // DEBUG: Check input consistency
-    /*
-    ch_reheader_inputs.tuple_input
-        .take(5)
-        .view { meta, bam, bai, fasta, fai ->
-            """
-            ═══════════════════════════════════════════
-            REHEADER INPUT DEBUG:
-            Sample: ${meta.id}
-            Genome: ${meta.genome}
-            Segment: ${meta.segment}
-            Seg_Acc: ${meta.segment_accession}
-            BAM: ${bam.name} (${bam.size()} bytes)
-            BAI: ${bai.name} (${bai.size()} bytes)
-            FASTA: ${fasta.name} (${fasta.size()} bytes)
-            FAI: ${fai.name} (${fai.size()} bytes)
-            ═══════════════════════════════════════════
-            """.stripIndent()
-        }   
-    */
         
     REHEADER_SEGMENT_BAM(
         ch_reheader_inputs.tuple_input,
@@ -641,6 +621,14 @@ workflow WASTEFLOW {
         ch_all_snpeff_config_unified,     
         ch_all_fasta_unified              
     )
+    snpeff_annotated_vcf = VARIANTS_QC.out.snpeff_vcf
+    snpeff_annotated_tbi = VARIANTS_QC.out.snpeff_tbi
+    snpeff_annotated_stats = VARIANTS_QC.out.snpeff_stats
+    snpeff_annotated_csv = VARIANTS_QC.out.snpeff_csv
+    snpeff_annotated_txt = VARIANTS_QC.out.snpeff_txt
+    snpeff_annotated_html = VARIANTS_QC.out.snpeff_html
+    snpsift_annotated_txt = VARIANTS_QC.out.snpsift_txt
+    ch_versions = ch_versions.mix(VARIANTS_QC.out.versions)
 
     //
     // SUBWORKFLOW: Freyja variant analysis
@@ -651,6 +639,7 @@ workflow WASTEFLOW {
             ch_sars_cov2_fasta,
             ch_rsv_a_fasta,
             ch_rsv_b_fasta,
+
         )
         ch_freyja_organized = FREYJA_ANALYSIS.out.freyja_organized
         ch_versions = ch_versions.mix(FREYJA_ANALYSIS.out.versions)
