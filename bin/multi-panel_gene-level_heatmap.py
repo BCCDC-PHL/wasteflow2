@@ -44,37 +44,18 @@ def normalize_sample_name(s, influenza=False):
         return match2.group(1)
     return s
 
-def extract_segment_name(sample_col, influenza=False):
-    """Extract segment name from sample column for influenza"""
-    if not influenza:
-        return None
-    # For influenza samples like: WW25-1508_S5_H5N1_M
-    # Extract the segment part (M, PB1, PB2, etc.)
-    parts = sample_col.split('_')
-    if len(parts) >= 3:
-        return parts[-1]  # Last part is segment
-    return None
-
 def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None):
-    """
-    Special handling for influenza where each sample has multiple segment columns
-    """
+    """Compute mean depth and breadth for influenza segments"""
     mosdepth_df = mosdepth_df.copy()
     
-    # Create a mapping: chrom -> segment_name
+    # Map chrom -> segment
     chrom_to_segment = dict(zip(bed_df['chrom'], bed_df['gene']))
-    
-    # Add segment column to mosdepth data based on chrom
     mosdepth_df['segment'] = mosdepth_df['chrom'].map(chrom_to_segment)
     
-    # Extract base sample name and create sample column
     mosdepth_df['base_sample'] = mosdepth_df['sample'].apply(lambda x: normalize_sample_name(x, influenza=True))
     
-    # Group by segment, base_sample, and genomic regions, then calculate mean coverage
-    # This handles multiple entries per segment per sample
     grouped = mosdepth_df.groupby(['segment', 'base_sample', 'chrom', 'start', 'end'])['coverage'].mean().reset_index()
     
-    # Now compute per-segment, per-sample statistics
     gene_cov = {}
     gene_breadth = {}
     
@@ -82,13 +63,11 @@ def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None):
         segment_data = grouped[grouped['segment'] == segment]
         
         if segment_data.empty:
-            # No data for this segment
             if sample_order:
                 gene_cov[segment] = pd.Series(0, index=sample_order)
                 gene_breadth[segment] = pd.Series(0, index=sample_order)
             continue
         
-        # Pivot to get samples as columns
         pivot = segment_data.pivot_table(
             index=['start', 'end'], 
             columns='base_sample', 
@@ -96,41 +75,29 @@ def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None):
             aggfunc='mean'
         )
         
-        # Ensure all samples in sample_order are present
         if sample_order:
             for s in sample_order:
                 if s not in pivot.columns:
                     pivot[s] = 0
             pivot = pivot[sample_order]
         
-        # Calculate mean coverage and breadth
         mean_cov = pivot.mean()
         breadth = (pivot >= 5).sum() / len(pivot) if len(pivot) > 0 else 0
         
         gene_cov[segment] = mean_cov
         gene_breadth[segment] = breadth
     
-    # Create dataframes with segment order from BED
     gene_order = bed_df['gene'].tolist()
-    df_cov = pd.DataFrame.from_dict(gene_cov, orient='index')
-    df_breadth = pd.DataFrame.from_dict(gene_breadth, orient='index')
-    
-    # Reindex to match BED file order
-    df_cov = df_cov.reindex(gene_order)
-    df_breadth = df_breadth.reindex(gene_order)
-    
-    # Fill NaN with 0
-    df_cov = df_cov.fillna(0)
-    df_breadth = df_breadth.fillna(0)
+    df_cov = pd.DataFrame.from_dict(gene_cov, orient='index').reindex(gene_order).fillna(0)
+    df_breadth = pd.DataFrame.from_dict(gene_breadth, orient='index').reindex(gene_order).fillna(0)
     
     return df_cov, df_breadth
 
 def compute_gene_coverage(mosdepth_df, bed_df, sample_order=None, influenza=False):
-    """Standard coverage computation for single-segment viruses (SARS-CoV-2, RSV)"""
+    """Compute mean depth and percent coverage for all viruses"""
     if influenza:
         return compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order)
     
-    # Original logic for non-influenza
     df_wide = mosdepth_df.pivot_table(
         index=["chrom", "start", "end"], columns="sample", values="coverage"
     ).reset_index()
@@ -139,12 +106,10 @@ def compute_gene_coverage(mosdepth_df, bed_df, sample_order=None, influenza=Fals
     cov_cols_clean = [normalize_sample_name(c) for c in cov_cols]
     df_wide.rename(columns=dict(zip(cov_cols, cov_cols_clean)), inplace=True)
     
-    # Handle duplicate columns by averaging
     df_numeric = df_wide.iloc[:, 3:]
     if df_numeric.columns.duplicated().any():
         df_numeric = df_numeric.T.groupby(level=0).mean().T
     
-    # Ensure all samples present
     if sample_order:
         for s in sample_order:
             if s not in df_numeric.columns:
@@ -155,6 +120,7 @@ def compute_gene_coverage(mosdepth_df, bed_df, sample_order=None, influenza=Fals
     
     gene_cov = {}
     gene_breadth = {}
+    
     for _, row in bed_df.iterrows():
         cov_rows = df_wide_clean[
             (df_wide_clean["start"] < row["end"]) & 
@@ -170,8 +136,8 @@ def compute_gene_coverage(mosdepth_df, bed_df, sample_order=None, influenza=Fals
         gene_breadth[row["gene"]] = breadth
     
     gene_order = bed_df["gene"].tolist()
-    df_cov = pd.DataFrame.from_dict(gene_cov, orient="index").reindex(gene_order)
-    df_breadth = pd.DataFrame.from_dict(gene_breadth, orient="index").reindex(gene_order)
+    df_cov = pd.DataFrame.from_dict(gene_cov, orient="index").reindex(gene_order).fillna(0)
+    df_breadth = pd.DataFrame.from_dict(gene_breadth, orient="index").reindex(gene_order).fillna(0)
     
     return df_cov, df_breadth
 
@@ -183,7 +149,6 @@ def make_empty_gene_df(bed_file, sample_list):
     return df_cov, df_breadth
 
 def generate_x_labels(df_cov, metadata_df=None):
-    """Generate x-axis labels matching the columns of df_cov"""
     cols = df_cov.columns.tolist()
     if metadata_df is not None:
         label_map = {
@@ -224,22 +189,34 @@ def load_or_empty(cov_file, bed_file, sample_list, influenza=False):
         return compute_gene_coverage(mosdepth_df, bed_df, sample_list, influenza=influenza)
     return make_empty_gene_df(bed_file, sample_list)
 
-def write_segment_coverage_tsv(df_breadth, output_file, level_name="Segment"):
-    df = df_breadth.copy()
-    if isinstance(df.index, pd.MultiIndex):
-        df_long = df.reset_index().melt(
-            id_vars=list(df.index.names),
-            var_name="Sample",
-            value_name="percent_covered"
-        )
+def write_segment_coverage_tsv(df_breadth, df_cov, output_file, level_name="Segment", pathogen_name=None):
+    """Write TSV with percent_covered and mean_depth, flatten MultiIndex if present"""
+    df_b = df_breadth.copy() * 100  # convert to %
+    df_c = df_cov.copy()
+
+    # Flatten MultiIndex if exists
+    if isinstance(df_b.index, pd.MultiIndex):
+        df_b = df_b.reset_index()
+        df_c = df_c.reset_index()
+        df_b = df_b.rename(columns={df_b.columns[0]: "Pathogen", df_b.columns[1]: "Segment"})
+        df_c = df_c.rename(columns={df_c.columns[0]: "Pathogen", df_c.columns[1]: "Segment"})
     else:
-        df_long = df.reset_index().melt(
-            id_vars="index",
-            var_name="Sample",
-            value_name="percent_covered"
-        ).rename(columns={"index": level_name})
-    df_long["percent_covered"] = (df_long["percent_covered"] * 100).round(1)
-    df_long.to_csv(output_file, sep="\t", index=False)
+        df_b = df_b.reset_index().rename(columns={df_b.index.name: level_name})
+        df_c = df_c.reset_index().rename(columns={df_c.index.name: level_name})
+
+    records = []
+    for _, row in df_b.iterrows():
+        for sample in df_b.columns[2:]:
+            records.append({
+                "Pathogen": row["Pathogen"] if "Pathogen" in row else pathogen_name,
+                "Segment": row["Segment"],
+                "Sample": sample,
+                "percent_covered": round(row[sample], 1),
+                "mean_depth": round(df_c.loc[df_c.index[_], sample], 2)
+            })
+
+    df_out = pd.DataFrame(records)
+    df_out.to_csv(output_file, sep="\t", index=False)
 
 # ----------------------
 # Main
@@ -285,12 +262,10 @@ def main():
         meta_sorted = meta_filtered.sort_values(["collection_date", "site_prefix", "collection_site"])
         sample_list = meta_sorted["sample_id"].tolist()
     else:
-        # Extract sample list from first available file
         sample_list = None
         for cov in [args.sars, args.rsvA, args.rsvB, args.h1n1, args.h3n2, args.h5n1]:
             if cov and os.path.exists(cov):
                 df_temp = load_mosdepth(cov)
-                # For influenza, extract base sample names
                 is_influenza = any(x in cov for x in ['h1n1', 'h3n2', 'h5n1'])
                 samples = df_temp['sample'].unique()
                 sample_list = sorted(list(set([normalize_sample_name(s, influenza=is_influenza) for s in samples])))
@@ -298,7 +273,7 @@ def main():
         meta_sorted = None
 
     # ----------------------
-    # Load SARS/RSV
+    # SARS/RSV
     # ----------------------
     df_sars_cov, df_sars_breadth = load_or_empty(args.sars, args.sars_bed, sample_list, influenza=False)
     df_rsvA_cov, df_rsvA_breadth = load_or_empty(args.rsvA, args.rsvA_bed, sample_list, influenza=False)
@@ -309,12 +284,13 @@ def main():
     x_labels_rsvB = generate_x_labels(df_rsvB_cov, meta_sorted)
 
     if args.out_sarsrsv_tsv:
-        df_sarsrsv_breadth = pd.concat(
-            [df_sars_breadth, df_rsvA_breadth, df_rsvB_breadth],
-            keys=["SARS-CoV-2","RSV-A","RSV-B"],
-            names=["Pathogen","Gene"]
-        )
-        write_segment_coverage_tsv(df_sarsrsv_breadth, args.out_sarsrsv_tsv, level_name="Gene")
+        write_segment_coverage_tsv(pd.concat([df_sars_breadth, df_rsvA_breadth, df_rsvB_breadth],
+                                             keys=["SARS-CoV-2","RSV-A","RSV-B"],
+                                             names=["Pathogen","Gene"]),
+                                   pd.concat([df_sars_cov, df_rsvA_cov, df_rsvB_cov],
+                                             keys=["SARS-CoV-2","RSV-A","RSV-B"],
+                                             names=["Pathogen","Gene"]),
+                                   args.out_sarsrsv_tsv)
 
     fig, axes = plt.subplots(3,1, figsize=(max(15, max(df_sars_cov.shape[1], df_rsvA_cov.shape[1], df_rsvB_cov.shape[1])*0.5), 12))
     plot_heatmap_with_breadth(df_sars_cov, df_sars_breadth, "SARS-CoV-2", ax=axes[0], x_labels=x_labels_sars)
@@ -326,7 +302,7 @@ def main():
     plt.close(fig)
 
     # ----------------------
-    # Load Influenza
+    # Influenza
     # ----------------------
     df_h1n1_cov, df_h1n1_breadth = load_or_empty(args.h1n1, args.h1n1_bed, sample_list, influenza=True)
     df_h3n2_cov, df_h3n2_breadth = load_or_empty(args.h3n2, args.h3n2_bed, sample_list, influenza=True)
@@ -337,12 +313,13 @@ def main():
     x_labels_h5n1 = generate_x_labels(df_h5n1_cov, meta_sorted)
 
     if args.out_influenza_tsv:
-        df_influenza_breadth = pd.concat(
-            [df_h1n1_breadth, df_h3n2_breadth, df_h5n1_breadth],
-            keys=["H1N1","H3N2","H5N1"],
-            names=["Pathogen","Segment"]
-        )
-        write_segment_coverage_tsv(df_influenza_breadth, args.out_influenza_tsv, level_name="Segment")
+        write_segment_coverage_tsv(pd.concat([df_h1n1_breadth, df_h3n2_breadth, df_h5n1_breadth],
+                                             keys=["H1N1","H3N2","H5N1"],
+                                             names=["Pathogen","Segment"]),
+                                   pd.concat([df_h1n1_cov, df_h3n2_cov, df_h5n1_cov],
+                                             keys=["H1N1","H3N2","H5N1"],
+                                             names=["Pathogen","Segment"]),
+                                   args.out_influenza_tsv)
 
     fig, axes = plt.subplots(3,1, figsize=(max(15, max(df_h1n1_cov.shape[1], df_h3n2_cov.shape[1], df_h5n1_cov.shape[1])*0.5), 12))
     plot_heatmap_with_breadth(df_h1n1_cov, df_h1n1_breadth, "Influenza A (H1N1)", ax=axes[0], bold_threshold=0.75, x_labels=x_labels_h1n1)
