@@ -2,6 +2,7 @@
 
 include { MINIMAP2_ALIGN                         } from '../../modules/nf-core/minimap2/align/main'
 include { SEQKIT_GREP                            } from '../../modules/nf-core/seqkit/grep/main'
+include { SEQKIT_REPLACE                         } from '../../modules/nf-core/seqkit/replace/main'
 include { SEQKIT_STATS as SEQKIT_STATS_SEROTYPES } from '../../modules/nf-core/seqkit/stats/main'
 include { ASSIGN_SEROTYPES                       } from '../../modules/local/assign_serotypes.nf'
 
@@ -34,17 +35,73 @@ workflow INFLUENZA_SEROTYPING {
             new_meta.genome = 'flu_db'
             [new_meta, reads]
         }
+    
+    // ========================================================================
+    // SEQKIT_REPLACE - Clean read headers ONCE before alignment
+    // ========================================================================
+    
+    // Split paired-end reads for individual processing
+    ch_flu_reads_split = ch_flu_reads
+        .flatMap { meta, reads ->
+            if (meta.single_end) {
+                // Single-end: one file
+                [[meta, reads[0]]]
+            } else {
+                // Paired-end: process R1 and R2 separately
+                def meta_r1 = meta.clone()
+                meta_r1.read_pair = 'R1'
+                
+                def meta_r2 = meta.clone()
+                meta_r2.read_pair = 'R2'
+                
+                [
+                    [meta_r1, reads[0]],
+                    [meta_r2, reads[1]]
+                ]
+            }
+        }
+    
+    // Run SEQKIT_REPLACE once per file to remove Kraken2 suffixes
+    SEQKIT_REPLACE(ch_flu_reads_split)
+
+    
+    // Group R1/R2 back together for alignment
+    ch_cleaned_reads = SEQKIT_REPLACE.out.fastx
+        .map { meta, fastx ->
+            // Create grouping key from sample ID
+            def group_key = meta.id
+            tuple(group_key, meta, fastx)
+        }
+        .groupTuple(by: 0)
+        .map { group_key, metas, fastqs ->
+            // Take first meta and clean up
+            def meta = metas[0].clone()
+            meta.remove('read_pair')
+            
+            // Sort fastqs by R1/R2 if paired
+            def sorted_fastqs = fastqs
+            if (fastqs.size() == 2) {
+                // Sort by the read_pair field from the metas
+                def indexed = [metas, fastqs].transpose().sort { it[0].read_pair }
+                sorted_fastqs = indexed.collect { it[1] }
+                meta.single_end = false
+            } else {
+                meta.single_end = true
+            }
+            
+            tuple(meta, sorted_fastqs)
+        }
 
     // Prepare database for MINIMAP2
     ch_flu_db_fasta_meta = ch_flu_db_fasta.map { fasta -> [[id: 'flu_db'], fasta] }
 
-    // Run MINIMAP2 alignment
+    // Run MINIMAP2 alignment with cleaned reads
     bam_format = 'true'
     bam_format_ext = 'bai'
     cigar_paf_format = 'false'
     cigar_bam = 'false'
     MINIMAP2_ALIGN(
-        ch_flu_reads,
+        ch_cleaned_reads,
         ch_flu_db_fasta_meta.first(),
         bam_format,
         bam_format_ext,
@@ -87,20 +144,20 @@ workflow INFLUENZA_SEROTYPING {
             tuple(new_meta, txt)
         }
     
-    // Step 3: Join with original reads using BOTH sample ID and ensure we preserve pairing
+    // Step 3: Join with CLEANED reads (from SEQKIT_REPLACE output)
     // Key by sample ID only for the join
     read_lists_keyed = read_lists_with_serotype
         .map { meta, txt ->
             tuple(meta.id, meta, txt)
         }
     
-    reads_keyed = ch_flu_reads
+    cleaned_reads_keyed = ch_cleaned_reads
         .map { meta, reads ->
             tuple(meta.id, meta, reads)
         }
     
     reads_with_serotype = read_lists_keyed
-        .combine(reads_keyed, by: 0)
+        .combine(cleaned_reads_keyed, by: 0)
         .map { _orig_id, meta_sero, txt, meta_reads, reads ->
             // Merge metadata, preserving single_end info from reads
             def final_meta = meta_sero + [
@@ -109,9 +166,8 @@ workflow INFLUENZA_SEROTYPING {
             tuple(final_meta, txt, reads)
         }
     
-    // Step 4: Split paired-end reads into separate R1/R2 invocations
-    // Keep meta.id unchanged, add read_pair info for suffix only
-    seqkit_inputs = reads_with_serotype
+    // Step 4: Split paired-end reads into separate R1/R2 invocations for SEQKIT_GREP
+    seqkit_grep_inputs = reads_with_serotype
         .flatMap { meta, txt, reads ->
             if (meta.single_end) {
                 // Single-end: one invocation
@@ -131,10 +187,10 @@ workflow INFLUENZA_SEROTYPING {
             }
         }
     
-    // Step 5: Call SEQKIT_GREP
+    // Step 5: Call SEQKIT_GREP with cleaned reads
     SEQKIT_GREP(
-        seqkit_inputs.map { meta, read, _txt -> tuple(meta, read) },
-        seqkit_inputs.map { _meta, _read, txt -> txt }
+        seqkit_grep_inputs.map { meta, read, _txt -> tuple(meta, read) },
+        seqkit_grep_inputs.map { _meta, _read, txt -> txt }
     )
     
     // Step 6: Group R1/R2 pairs back together by sample ID + serotype
