@@ -1,3 +1,4 @@
+'''
 #!/usr/bin/env python
 
 import os
@@ -143,6 +144,195 @@ def main(args=None):
         sanitise_name=args.SANITISE_NAME,
         sanitise_name_delimiter=args.SANITISE_NAME_DELIMITER,
         sanitise_name_index=args.SANITISE_NAME_INDEX,
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+#!/usr/bin/env python
+
+import os
+import sys
+import glob
+import argparse
+import re
+
+
+def parse_args(args=None):
+    Description = (
+        "Generate nf-core/viralrecon samplesheet from a directory of FastQ files."
+    )
+    Epilog = "Example usage: python fastq_dir_to_samplesheet.py <FASTQ_DIR> <SAMPLESHEET_FILE>"
+
+    parser = argparse.ArgumentParser(description=Description, epilog=Epilog)
+    parser.add_argument("FASTQ_DIR", help="Folder containing raw FastQ files.")
+    parser.add_argument("SAMPLESHEET_FILE", help="Output samplesheet file.")
+    parser.add_argument(
+        "-r1",
+        "--read1_extension",
+        type=str,
+        dest="READ1_EXTENSION",
+        default="_R1_001.fastq.gz",
+        help="File extension for read 1.",
+    )
+    parser.add_argument(
+        "-r2",
+        "--read2_extension",
+        type=str,
+        dest="READ2_EXTENSION",
+        default="_R2_001.fastq.gz",
+        help="File extension for read 2.",
+    )
+    parser.add_argument(
+        "-se",
+        "--single_end",
+        dest="SINGLE_END",
+        action="store_true",
+        help="Treat all reads as single-end (only read 1).",
+    )
+    parser.add_argument(
+        "-sn",
+        "--sanitise_name",
+        dest="SANITISE_NAME",
+        action="store_true",
+        help="Sanitise FastQ file name to get sample id.",
+    )
+    parser.add_argument(
+        "-sd",
+        "--sanitise_name_delimiter",
+        type=str,
+        dest="SANITISE_NAME_DELIMITER",
+        default="_",
+        help="Delimiter to use to sanitise sample name.",
+    )
+    parser.add_argument(
+        "-si",
+        "--sanitise_name_index",
+        type=int,
+        dest="SANITISE_NAME_INDEX",
+        default=1,
+        help="After splitting FastQ name by delimiter, keep elements before this index (1-based).",
+    )
+    parser.add_argument(
+        "-ip",
+        "--include_pattern",
+        type=str,
+        dest="INCLUDE_PATTERN",
+        default=None,
+        help="Only include samples whose names match this regex/pattern (case-insensitive).",
+    )
+    parser.add_argument(
+        "-xp",
+        "--exclude_pattern",
+        type=str,
+        dest="EXCLUDE_PATTERN",
+        default=None,
+        help="Exclude samples whose names match this regex/pattern (case-insensitive).",
+    )
+    return parser.parse_args(args)
+
+
+def fastq_dir_to_samplesheet(
+    fastq_dir,
+    samplesheet_file,
+    read1_extension="_R1_001.fastq.gz",
+    read2_extension="_R2_001.fastq.gz",
+    single_end=False,
+    sanitise_name=False,
+    sanitise_name_delimiter="_",
+    sanitise_name_index=1,
+    include_pattern=None,
+    exclude_pattern=None,
+):
+    def sanitize_sample(path, extension):
+        """Retrieve sample id from filename"""
+        sample = os.path.basename(path).replace(extension, "")
+        if sanitise_name:
+            sample = sanitise_name_delimiter.join(
+                os.path.basename(path).split(sanitise_name_delimiter)[
+                    :sanitise_name_index
+                ]
+            )
+        return sample
+
+    def get_fastqs(extension):
+        """Return sorted list of matching FastQ files"""
+        return sorted(
+            glob.glob(os.path.join(fastq_dir, f"*{extension}"), recursive=False)
+        )
+
+    def passes_filter(sample_name):
+        """Check include/exclude pattern filters (case-insensitive)"""
+        if include_pattern and not re.search(
+            include_pattern, sample_name, re.IGNORECASE
+        ):
+            return False
+        if exclude_pattern and re.search(exclude_pattern, sample_name, re.IGNORECASE):
+            return False
+        return True
+
+    read_dict = {}
+
+    ## Get read 1 files
+    for read1_file in get_fastqs(read1_extension):
+        sample = sanitize_sample(read1_file, read1_extension)
+        if not passes_filter(sample):
+            continue
+        if sample not in read_dict:
+            read_dict[sample] = {"R1": [], "R2": []}
+        read_dict[sample]["R1"].append(read1_file)
+
+    ## Get read 2 files
+    if not single_end:
+        for read2_file in get_fastqs(read2_extension):
+            sample = sanitize_sample(read2_file, read2_extension)
+            if not passes_filter(sample):
+                continue
+            if sample in read_dict:
+                read_dict[sample]["R2"].append(read2_file)
+
+    ## Write to file
+    if len(read_dict) > 0:
+        out_dir = os.path.dirname(samplesheet_file)
+        if out_dir and not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        with open(samplesheet_file, "w") as fout:
+            header = ["sample", "fastq_1", "fastq_2"]
+            fout.write(",".join(header) + "\n")
+            for sample, reads in sorted(read_dict.items()):
+                for idx, read_1 in enumerate(reads["R1"]):
+                    read_2 = reads["R2"][idx] if idx < len(reads["R2"]) else ""
+                    fout.write(f"{sample},{read_1},{read_2}\n")
+    else:
+        error_str = (
+            "\nWARNING: No FastQ files found so samplesheet has not been created!\n\n"
+            "Please check the values provided for the:\n"
+            "  - Path to the directory containing the FastQ files\n"
+            "  - '--read1_extension' parameter\n"
+            "  - '--read2_extension' parameter\n"
+            "  - '--include_pattern' or '--exclude_pattern' filters\n"
+        )
+        print(error_str)
+        sys.exit(1)
+
+
+def main(args=None):
+    args = parse_args(args)
+
+    fastq_dir_to_samplesheet(
+        fastq_dir=args.FASTQ_DIR,
+        samplesheet_file=args.SAMPLESHEET_FILE,
+        read1_extension=args.READ1_EXTENSION,
+        read2_extension=args.READ2_EXTENSION,
+        single_end=args.SINGLE_END,
+        sanitise_name=args.SANITISE_NAME,
+        sanitise_name_delimiter=args.SANITISE_NAME_DELIMITER,
+        sanitise_name_index=args.SANITISE_NAME_INDEX,
+        include_pattern=args.INCLUDE_PATTERN,
+        exclude_pattern=args.EXCLUDE_PATTERN,
     )
 
 

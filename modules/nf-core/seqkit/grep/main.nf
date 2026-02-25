@@ -1,6 +1,6 @@
 process SEQKIT_GREP {
     tag "$meta.id"
-    label 'process_low'
+    label 'process_high'
 
 
     conda "${moduleDir}/environment.yml"

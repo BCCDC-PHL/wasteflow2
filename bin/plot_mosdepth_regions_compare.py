@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -6,7 +7,8 @@ from matplotlib.patches import Patch, Rectangle
 import argparse
 import os
 
-def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
+
+def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2", prefix="output"):
     # Load data
     df = pd.read_csv(file_path, sep="\t")
 
@@ -63,10 +65,12 @@ def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
         raise ValueError(f"Unknown pathogen: {pathogen}")
 
     # Colors for genes
-    gene_colors = dict(zip(
-        [g[0] for g in gene_annotations],
-        sns.color_palette("tab10", n_colors=len(gene_annotations))
-    ))
+    gene_colors = dict(
+        zip(
+            [g[0] for g in gene_annotations],
+            sns.color_palette("tab10", n_colors=len(gene_annotations)),
+        )
+    )
 
     bin_mid_to_label = dict(zip(df["bin_mid"], df["bin_label"]))
     unique_bin_labels = list(df["bin_label"].unique())
@@ -75,25 +79,50 @@ def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
         subset = df[df["type"] == sample_type]
 
         fig, ax = plt.subplots(figsize=(24, 6))
-        sns.boxplot(data=subset, x="bin_label", y="coverage", color="skyblue", fliersize=1, ax=ax)
+        sns.boxplot(
+            data=subset,
+            x="bin_label",
+            y="coverage",
+            color="skyblue",
+            fliersize=1,
+            ax=ax,
+        )
 
         median_per_bin = subset.groupby("bin_label")["coverage"].median().reset_index()
-        sns.lineplot(data=median_per_bin, x="bin_label", y="coverage", color="red", label="Median", linewidth=2, ax=ax)
+        sns.lineplot(
+            data=median_per_bin,
+            x="bin_label",
+            y="coverage",
+            color="red",
+            label="Median",
+            linewidth=2,
+            ax=ax,
+        )
         # Identify bins where median coverage < 10
         median_per_bin = subset.groupby("bin_label")["coverage"].median().reset_index()
-        sns.lineplot(data=median_per_bin, x="bin_label", y="coverage", color="red", label="Median", linewidth=2, ax=ax)
+        sns.lineplot(
+            data=median_per_bin,
+            x="bin_label",
+            y="coverage",
+            color="red",
+            label="Median",
+            linewidth=2,
+            ax=ax,
+        )
 
-        low_cov_bins = median_per_bin[median_per_bin["coverage"] < 10]["bin_label"].tolist()
+        low_cov_bins = median_per_bin[median_per_bin["coverage"] < 10][
+            "bin_label"
+        ].tolist()
 
         for bin_label in low_cov_bins:
             x_idx = unique_bin_labels.index(bin_label)
             ax.plot(
                 x_idx,
                 -100,  # slightly below the y-limit max
-                marker='*',
-                color='black',
+                marker="*",
+                color="black",
                 markersize=10,
-                zorder=10
+                zorder=10,
             )
 
         # Draw gene bars under x-axis
@@ -112,8 +141,8 @@ def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
                     width=(x_end - x_start + 1),
                     height=300,
                     facecolor=gene_color,
-                    edgecolor='black',
-                    linewidth=0.5
+                    edgecolor="black",
+                    linewidth=0.5,
                 )
                 ax.add_patch(rect)
 
@@ -121,42 +150,68 @@ def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2"):
                     x=(x_start + x_end) / 2,
                     y=-650,
                     s=gene,
-                    ha='center',
-                    va='center',
+                    ha="center",
+                    va="center",
                     fontsize=7,
                     rotation=0,
-                    color='black'
+                    color="black",
                 )
 
         ax.set_xticks(np.linspace(0, len(unique_bin_labels) - 1, num=20, dtype=int))
-        ax.set_xticklabels([unique_bin_labels[i] for i in ax.get_xticks()], rotation=90, fontsize=6)
+        ax.set_xticklabels(
+            [unique_bin_labels[i] for i in ax.get_xticks()], rotation=90, fontsize=6
+        )
         ax.set_xlabel("Genome Position (bin midpoints)")
         ax.set_ylabel("Coverage")
-        ax.set_title(f"{pathogen.upper()} Coverage - {sample_type.upper()} Samples\nBoxplots with Median & Gene Annotations")
+        ax.set_title(
+            f"{pathogen.upper()} Coverage - {sample_type.upper()} Samples\nBoxplots with Median & Gene Annotations"
+        )
         ax.set_ylim(-1000, 3000)
         ax.set_yticks(np.arange(300, 3000, 300))
 
         fig.subplots_adjust(bottom=0.3)
 
-        gene_legend_handles = [Patch(color=gene_colors[gene], label=gene) for gene in gene_colors]
-        ax.legend(handles=gene_legend_handles, title="Genes", loc="upper right", fontsize='small', title_fontsize='small')
+        gene_legend_handles = [
+            Patch(color=gene_colors[gene], label=gene) for gene in gene_colors
+        ]
+        ax.legend(
+            handles=gene_legend_handles,
+            title="Genes",
+            loc="upper right",
+            fontsize="small",
+            title_fontsize="small",
+        )
 
-        output_file = f"{pathogen}_coverage_boxplot_{sample_type}.png"
+        output_file = f"{prefix}_{pathogen}_coverage_boxplot_{sample_type}.png"
         plt.tight_layout()
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.savefig(output_file, dpi=300, bbox_inches="tight")
         print(f"Saved plot to: {output_file}")
         plt.close()
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Plot genome coverage boxplots with gene annotations.")
-    parser.add_argument('--input', required=True, help="Path to TSV file with coverage data")
-    parser.add_argument('--pathogen', required=True, choices=["sars-cov-2", "rsva", "rsvb"], help="Pathogen type")
+    parser = argparse.ArgumentParser(
+        description="Plot genome coverage boxplots with gene annotations."
+    )
+    parser.add_argument(
+        "--input", required=True, help="Path to TSV file with coverage data"
+    )
+    parser.add_argument(
+        "--pathogen",
+        required=True,
+        choices=["sars-cov-2", "rsva", "rsvb"],
+        help="Pathogen type",
+    )
+    parser.add_argument("--prefix", required=True, help="Prefix for output file")
     args = parser.parse_args()
 
     if not os.path.isfile(args.input):
         raise FileNotFoundError(f"Input file not found: {args.input}")
 
-    plot_coverage_with_annotations(args.input, pathogen=args.pathogen)
+    plot_coverage_with_annotations(
+        args.input, pathogen=args.pathogen, prefix=args.prefix
+    )
+
 
 if __name__ == "__main__":
     main()

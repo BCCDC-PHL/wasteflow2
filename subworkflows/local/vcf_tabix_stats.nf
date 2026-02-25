@@ -16,27 +16,24 @@ workflow VCF_TABIX_STATS {
 
     ch_versions = Channel.empty()
 
-    TABIX_TABIX (
+    TABIX_TABIX(
         vcf
     )
     ch_versions = ch_versions.mix(TABIX_TABIX.out.versions.first())
 
-    BCFTOOLS_STATS (
+    BCFTOOLS_STATS(
         vcf.join(TABIX_TABIX.out.tbi, by: [0]),
         regions,
         targets,
         samples,
-        [ [:], [] ],
-        [ [:], [] ]
+        [[:], []],
+        [[:], []],
     )
     ch_versions = ch_versions.mix(BCFTOOLS_STATS.out.versions.first())
 
     emit:
-    tbi      = TABIX_TABIX.out.tbi      // channel: [ val(meta), [ tbi ] ]
-    csi      = TABIX_TABIX.out.csi      // channel: [ val(meta), [ csi ] ]
-
+    tbi      = TABIX_TABIX.out.tbi // channel: [ val(meta), [ tbi ] ]
+    csi      = TABIX_TABIX.out.csi // channel: [ val(meta), [ csi ] ]
     stats    = BCFTOOLS_STATS.out.stats // channel: [ val(meta), [ txt ] ]
-
-    versions = ch_versions              // channel: [ versions.yml ]
-
+    versions = ch_versions // channel: [ versions.yml ]
 }
