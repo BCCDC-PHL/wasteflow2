@@ -633,13 +633,20 @@ workflow WASTEFLOW {
     //
     // SUBWORKFLOW: Freyja variant analysis
     //
+    //
+    // SUBWORKFLOW: Freyja variant analysis
+    //
+    // For influenza, we need to pass the HA segment BAMs which come from the reheadered/split BAMs
+    // We'll use ch_bam_reheader which includes both non-influenza full genomes and influenza segments
     if (!params.skip_variants && !params.skip_freyja) {
         FREYJA_ANALYSIS(
-            ch_bam,
+            ch_bam_reheader,  // Changed from ch_bam to include segment-split BAMs
             ch_sars_cov2_fasta,
             ch_rsv_a_fasta,
             ch_rsv_b_fasta,
-
+            ch_h1n1_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first(),
+            ch_h3n2_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first(),
+            ch_h5n1_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first()
         )
         ch_freyja_organized = FREYJA_ANALYSIS.out.freyja_organized
         ch_versions = ch_versions.mix(FREYJA_ANALYSIS.out.versions)
