@@ -184,42 +184,57 @@ class IvarVariants:
         return vcf_filter
 
     def initiate_vcf_df(self):
-        """Read the input ivar.tsv file, process the data depending on the parameters
-        selected when running the script and create a pandas dataframe with it
 
-        Returns:
-            vcf_df: Pandas dataframe after processing the file
-        """
         ivar_df = self.raw_ivar_df.copy()
         ivar_df = ivar_df.dropna(thresh=2)
+
         if self.pass_only:
-            ivar_df = ivar_df[ivar_df["PASS"] is True]
+            ivar_df = ivar_df[ivar_df["PASS"] == True]
+
         ivar_df = ivar_df[ivar_df["ALT_FREQ"] >= self.freq_threshold]
+
+        numeric_cols = [
+            "TOTAL_DP","REF_DP","REF_RV",
+            "REF_QUAL","ALT_DP","ALT_RV","ALT_QUAL","ALT_FREQ"
+        ]
+        for col in numeric_cols:
+            ivar_df[col] = pd.to_numeric(ivar_df[col], errors="coerce").fillna(0)
+
         vcf_dict = {}
+
         vcf_dict["REGION"] = ivar_df["REGION"]
         vcf_dict["POS"] = ivar_df["POS"]
         vcf_dict["ID"] = ["."] * len(ivar_df)
-        # Dealing with insertions and deletions
+
         vcf_dict["REF"] = np.where(
             ivar_df["ALT"].str[0] == "-",
             ivar_df["REF"] + ivar_df["ALT"].str[1:],
             ivar_df["REF"],
         )
+
         vcf_dict["ALT"] = np.where(
             ivar_df["ALT"].str[0] == "+",
             ivar_df["REF"] + ivar_df["ALT"].str[1:],
             np.where(ivar_df["ALT"].str[0] == "-", ivar_df["REF"], ivar_df["ALT"]),
         )
+
         vcf_dict["QUAL"] = ["."] * len(ivar_df)
         vcf_dict["FILTER"] = ivar_df.apply(self.apply_filters, axis=1)
-        vcf_dict["INFO"] = np.select(
+
+        # ✅ INFO now includes DP
+        variant_type = np.select(
             [ivar_df["ALT"].str[0] == "+", ivar_df["ALT"].str[0] == "-"],
-            ["TYPE=INS", "TYPE=DEL"],
-            default="TYPE=SNP",
+            ["INS", "DEL"],
+            default="SNP",
         )
+
+        vcf_dict["INFO"] = [
+            f"TYPE={t};DP={dp}" for t, dp in zip(variant_type, ivar_df["TOTAL_DP"])
+        ]
+
+        # ✅ FORMAT WITHOUT DP
         format_cols = [
             "GT",
-            "DP",
             "REF_DP",
             "REF_RV",
             "REF_QUAL",
@@ -228,17 +243,26 @@ class IvarVariants:
             "ALT_QUAL",
             "ALT_FREQ",
         ]
+
         vcf_dict["FORMAT"] = ":".join(format_cols)
-        # simple workaround by setting the genotype to a constant 1
-        ivar_df["DP"] = ivar_df["TOTAL_DP"]
+
         ivar_df["GT"] = 1
-        vcf_dict["FILENAME"] = ivar_df[format_cols].astype(str).apply(":".join, axis=1)
+
+        for col in format_cols:
+            if col not in ivar_df.columns:
+                ivar_df[col] = 0
+
+        vcf_dict["FILENAME"] = (
+            ivar_df[format_cols]
+            .astype(str)
+            .apply(lambda x: ":".join(x.values), axis=1)
+        )
+
         if not self.ignore_merge:
-            # These columns are needed to merge codons. They will be deleted later
             vcf_dict["REF_CODON"] = ivar_df["REF_CODON"]
             vcf_dict["ALT_CODON"] = ivar_df["ALT_CODON"]
-        vcf_df = pd.DataFrame.from_dict(vcf_dict)
-        return vcf_df
+
+        return pd.DataFrame.from_dict(vcf_dict)
 
     def find_consecutive(self, vcf_df):
         """Find and extract the consecutive variants in the vcf dataframe
@@ -635,7 +659,7 @@ class IvarVariants:
             ]
             for index, row in zip(indexes_to_merge, rows_to_merge):
                 try:
-                    vcf_df.loc[index] = row
+                    vcf_df.loc[index] = row 
                 except ValueError:
                     print(f"Invalid row found: {str(row)}. Skipped")
             return vcf_df
@@ -690,6 +714,7 @@ class IvarVariants:
 
         header_info = [
             '##INFO=<ID=TYPE,Number=1,Type=String,Description="Either SNP (Single Nucleotide Polymorphism), DEL (deletion) or INS (Insertion)">',
+            '##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">',
         ]
         header_filter = [
             '##FILTER=<ID=PASS,Description="All filters passed">',
@@ -702,7 +727,6 @@ class IvarVariants:
             )
         header_format = [
             '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
-            '##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total Depth">',
             '##FORMAT=<ID=REF_DP,Number=1,Type=Integer,Description="Depth of reference base">',
             '##FORMAT=<ID=REF_RV,Number=1,Type=Integer,Description="Depth of reference base on reverse reads">',
             '##FORMAT=<ID=REF_QUAL,Number=1,Type=Integer,Description="Mean quality of reference base">',
