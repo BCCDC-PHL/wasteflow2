@@ -9,6 +9,7 @@ include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_RSV_COMBINED    } from '.
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H1N1            } from './fastq_align_minimap2'
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H3N2            } from './fastq_align_minimap2'
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H5N1            } from './fastq_align_minimap2'
+include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_FLU_B_VIC       } from './fastq_align_minimap2'
 
 // Import modules
 include { SAMTOOLS_VIEW as SAMTOOLS_VIEW_RSV_A                         } from '../../modules/nf-core/samtools/view/main'
@@ -28,6 +29,7 @@ workflow ALIGNMENT {
     h1n1_fasta             // channel: H1N1 fasta
     h3n2_fasta             // channel: H3N2 fasta
     h5n1_fasta             // channel: H5N1 fasta
+    flu_b_vic_fasta         // channel: Flu B Victoria fasta
 
     main:
     ch_versions = Channel.empty()
@@ -134,6 +136,12 @@ workflow ALIGNMENT {
         ch_h5n1_samples,
         h5n1_fasta.map { fasta -> [[id: 'H5N1'], fasta] },
     )
+
+    FASTQ_ALIGN_MINIMAP2_FLU_B_VIC(
+        ch_flu_b,
+        flu_b_vic_fasta.map { fasta -> [[id: 'FLU_B_VIC'], fasta] },
+    )
+
     ch_versions = ch_versions.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.versions)
 
     // Mix SARS-CoV-2 and Influenza outputs

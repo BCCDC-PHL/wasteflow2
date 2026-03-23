@@ -181,6 +181,13 @@ workflow WASTEFLOW {
         ch_h5n1_segment_snpeff_db = GENOME_PREPARATION.out.h5n1_segment_snpeff_db
         ch_h5n1_segment_snpeff_config = GENOME_PREPARATION.out.h5n1_segment_snpeff_config
 
+        ch_flu_b_vic_segment_fasta = GENOME_PREPARATION.out.b_vic_segment_fasta
+        ch_flu_b_vic_segment_gff = GENOME_PREPARATION.out.b_vic_segment_gff
+        ch_flu_b_vic_segment_fai = GENOME_PREPARATION.out.b_vic_segment_fai
+        ch_flu_b_vic_segment_chrom_sizes = GENOME_PREPARATION.out.b_vic_segment_chrom_sizes
+        ch_flu_b_vic_segment_snpeff_db = GENOME_PREPARATION.out.b_vic_segment_snpeff_db
+        ch_flu_b_vic_segment_snpeff_config = GENOME_PREPARATION.out.b_vic_segment_snpeff_config
+
         ch_versions = ch_versions.mix(GENOME_PREPARATION.out.versions)
         }
 
@@ -188,26 +195,32 @@ workflow WASTEFLOW {
     ch_all_segment_fasta = ch_h1n1_segment_fasta
         .mix(ch_h3n2_segment_fasta)
         .mix(ch_h5n1_segment_fasta)
+        .mix(ch_flu_b_vic_segment_fasta)
 
     ch_all_segment_fai = ch_h1n1_segment_fai
         .mix(ch_h3n2_segment_fai)
         .mix(ch_h5n1_segment_fai)
+        .mix(ch_flu_b_vic_segment_fai)
 
     ch_all_segment_gff = ch_h1n1_segment_gff
         .mix(ch_h3n2_segment_gff)
         .mix(ch_h5n1_segment_gff)
+        .mix(ch_flu_b_vic_segment_gff)
     
     ch_all_segment_chrom_sizes = ch_h1n1_segment_chrom_sizes
         .mix(ch_h3n2_segment_chrom_sizes)
         .mix(ch_h5n1_segment_chrom_sizes)
+        .mix(ch_flu_b_vic_segment_chrom_sizes)
 
     ch_all_segment_snpeff_db = ch_h1n1_segment_snpeff_db
         .mix(ch_h3n2_segment_snpeff_db)
         .mix(ch_h5n1_segment_snpeff_db)
+        .mix(ch_flu_b_vic_segment_snpeff_db)
 
     ch_all_segment_snpeff_config = ch_h1n1_segment_snpeff_config
         .mix(ch_h3n2_segment_snpeff_config)
         .mix(ch_h5n1_segment_snpeff_config)
+        .mix(ch_flu_b_vic_segment_snpeff_config)
     
     // SARS-CoV-2
     // Remove the .map() - the channel is already [meta, db]
@@ -339,7 +352,8 @@ workflow WASTEFLOW {
             ch_rsv_b_fasta,
             ch_h1n1_fasta,
             ch_h3n2_fasta,
-            ch_h5n1_fasta
+            ch_h5n1_fasta, 
+            ch_flu_b_vic_segment_fasta
         )
         ch_versions = ch_versions.mix(ALIGNMENT.out.versions)
 
