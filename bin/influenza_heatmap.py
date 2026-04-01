@@ -153,7 +153,7 @@ def generate_heatmap(df, all_serotypes, all_dates, site_order, output_prefix, su
         ax.tick_params(axis="y", labelrotation=0, labelsize=8)
 
     plt.subplots_adjust(top=0.95, bottom=0.05, left=0.07, right=0.95)
-    out_png = f"{output_prefix}_{suffix}_heatmap.png"
+    out_png = f"{args.outdir}/{output_prefix}_{suffix}_heatmap.png" if args.outdir else f"{output_prefix}_{suffix}_heatmap.png"
     plt.savefig(out_png, dpi=300)
     plt.close(fig)
 
@@ -292,7 +292,7 @@ def main(base_dir, metadata_path, output_prefix, normalize, target_read_summary,
         summary_rows.append(row)
 
     summary_df = pd.DataFrame(summary_rows)
-    out_tsv = f"{output_prefix}_serotype_summary.tsv"
+    out_tsv = f"{args.outdir}/{output_prefix}_serotype_summary.tsv" if args.outdir else f"{output_prefix}_serotype_summary.tsv"
     summary_df.to_csv(out_tsv, sep="\t", index=False)
 
 
@@ -300,6 +300,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Influenza serotype heatmap generator (metadata-integrated)")
     parser.add_argument("--base_dir", required=True)
     parser.add_argument("--metadata", required=True)
+    parser.add_argument("--outdir", required=False, help="Optional output directory (defaults to current dir)")
     parser.add_argument("--output_prefix", required=True)
     parser.add_argument("--normalize", action="store_true")
     parser.add_argument("--target_read_summary", required=False, help="Single seqkit summary TSV containing reads for all targets")

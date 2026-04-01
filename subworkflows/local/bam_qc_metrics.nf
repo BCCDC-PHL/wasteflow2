@@ -21,6 +21,7 @@ include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B     } from
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1         } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2         } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1         } from '../../modules/local/plot_mosdepth_regions'
+include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_FLU_B_VIC         } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2 } from '../../modules/local/plot_mosdepth_regions_aggregate'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_A     } from '../../modules/local/plot_mosdepth_regions_aggregate'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_B     } from '../../modules/local/plot_mosdepth_regions_aggregate'
@@ -62,8 +63,9 @@ workflow BAM_QC_METRICS {
                 return [meta, bam]
             rsv_b: meta.genome == 'OP975389.1'
                 return [meta, bam]
-            segments: meta.genome in ['H1N1', 'H3N2', 'H5N1'] && meta.containsKey('segment')
+            flu_segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC'] && meta.containsKey('segment')
                 return [meta, bam]
+            
         }
         .set { bam_by_type }
 
@@ -98,7 +100,7 @@ workflow BAM_QC_METRICS {
 
         // Influenza segments mark duplicates
         // Join segment BAMs with their corresponding references
-        bam_by_type.segments
+        bam_by_type.flu_segments
             .map { meta, bam -> 
                 // Create join key: virus + segment
                 def key = "${meta.genome}_${meta.segment}"
@@ -167,7 +169,7 @@ workflow BAM_QC_METRICS {
                     return [meta, bam, bai]
                 rsv_b: meta.genome == 'OP975389.1'
                     return [meta, bam, bai]
-                segments: meta.genome in ['H1N1', 'H3N2', 'H5N1'] && meta.containsKey('segment')
+                flu_segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC'] && meta.containsKey('segment')
                     return [meta, bam, bai]
             }
             .set { bam_bai_by_type }
@@ -197,7 +199,7 @@ workflow BAM_QC_METRICS {
         ch_versions = ch_versions.mix(PICARD_COLLECTMULTIPLEMETRICS_RSV_B.out.versions.first())
 
         // Segments Picard metrics - join with references
-        bam_bai_by_type.segments
+        bam_bai_by_type.flu_segments
             .map { meta, bam, bai -> 
                 def key = "${meta.genome}_${meta.segment}"
                 [key, meta, bam, bai]
@@ -244,7 +246,7 @@ workflow BAM_QC_METRICS {
                     return [meta, bam, bai, []]
                 rsv_b: meta.genome == 'OP975389.1'
                     return [meta, bam, bai, []]
-                segments: meta.genome in ['H1N1', 'H3N2', 'H5N1'] && meta.containsKey('segment')
+                flu_segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC'] && meta.containsKey('segment')
                     return [meta, bam, bai, []]
             }
             .set { bam_bai_by_type }
@@ -271,7 +273,7 @@ workflow BAM_QC_METRICS {
         ch_versions = ch_versions.mix(MOSDEPTH_GENOME_RSV_B.out.versions)
 
         // Segments MOSDEPTH - join with references
-        bam_bai_by_type.segments
+        bam_bai_by_type.flu_segments
             .map { meta, bam, bai, bed -> 
                 def key = "${meta.genome}_${meta.segment}"
                 [key, meta, bam, bai, bed]
@@ -335,6 +337,7 @@ workflow BAM_QC_METRICS {
                 h1n1: meta.genome =~ /(?i)H1N1/
                 h3n2: meta.genome =~ /(?i)H3N2/
                 h5n1: meta.genome =~ /(?i)H5N1/
+                flu_b_vic: meta.genome =~ /(?i)FLU-B-VIC/
             }
             .set { ch_mosdepth_branched }
 
@@ -355,10 +358,15 @@ workflow BAM_QC_METRICS {
         )
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1.out.versions)
 
+        PLOT_MOSDEPTH_REGIONS_SEGMENTS_FLU_B_VIC(
+            ch_mosdepth_branched.flu_b_vic.collect { it[1] }
+        )
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_SEGMENTS_FLU_B_VIC.out.versions)
+
         h1n1_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1.out.all_coverage_tsv.map { tsv -> [[id: 'H1N1'], tsv] }
         h3n2_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2.out.all_coverage_tsv.map { tsv -> [[id: 'H3N2'], tsv] }
         h5n1_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1.out.all_coverage_tsv.map { tsv -> [[id: 'H5N1'], tsv] }
-
+        flu_b_vic_coverage = PLOT_MOSDEPTH_REGIONS_SEGMENTS_FLU_B_VIC.out.all_coverage_tsv.map { tsv -> [[id: 'FLU-B-VIC'], tsv] }
 
         // Aggregate plots
         sars_cov_2_coverage_safe = sars_cov_2_coverage.ifEmpty([[id: 'MN908947.3_empty'], []])
@@ -367,6 +375,7 @@ workflow BAM_QC_METRICS {
         h1n1_coverage_safe = h1n1_coverage.ifEmpty([[id: 'H1N1_empty'], []])
         h3n2_coverage_safe = h3n2_coverage.ifEmpty([[id: 'H3N2_empty'], []])
         h5n1_coverage_safe = h5n1_coverage.ifEmpty([[id: 'H5N1_empty'], []])
+        flu_b_vic_coverage_safe = flu_b_vic_coverage.ifEmpty([[id: 'FLU-B-VIC_empty'], []])
 
         PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2(sars_cov_2_coverage, 'sars-cov-2')
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2.out.versions)
@@ -382,8 +391,9 @@ workflow BAM_QC_METRICS {
         ch_rsv_a_bed = params.rsv_a_bed ? Channel.fromPath(params.rsv_a_bed).map { bed -> [[id: 'PP109421.1'], bed] } : Channel.empty()
         ch_rsv_b_bed = params.rsv_b_bed ? Channel.fromPath(params.rsv_b_bed).map { bed -> [[id: 'OP975389.1'], bed] } : Channel.empty()
         ch_h1n1_bed = params.genomes['H1N1'].bed ? Channel.fromPath(params.genomes['H1N1'].bed ).map { bed -> [[id: 'H1N1'], bed] } : Channel.empty() 
-        ch_h3n2_bed = params.genomes['H3N2'].bed ? Channel.fromPath(params.genomes['H3N2'].bed ).map { bed -> [[id: 'H1N1'], bed] } : Channel.empty()
+        ch_h3n2_bed = params.genomes['H3N2'].bed ? Channel.fromPath(params.genomes['H3N2'].bed ).map { bed -> [[id: 'H3N2'], bed] } : Channel.empty()
         ch_h5n1_bed = params.genomes['H5N1'].bed ? Channel.fromPath(params.genomes['H5N1'].bed ).map { bed -> [[id: 'H5N1'], bed] } : Channel.empty()
+        ch_flu_b_vic_bed = params.genomes['FLU-B-VIC'].bed ? Channel.fromPath(params.genomes['FLU-B-VIC'].bed ).map { bed -> [[id: 'FLU-B-VIC'], bed] } : Channel.empty()
         ch_metadata = params.metadata ? Channel.fromPath(params.metadata) : Channel.value([])
         
         PLOT_MULTIPANEL_COVERAGE_HEATMAP(
@@ -393,12 +403,14 @@ workflow BAM_QC_METRICS {
             h1n1_coverage_safe,
             h3n2_coverage_safe,
             h5n1_coverage_safe,
+            flu_b_vic_coverage_safe,
             ch_sars_bed,
             ch_rsv_a_bed,
             ch_rsv_b_bed,
             ch_h1n1_bed,
             ch_h3n2_bed,
             ch_h5n1_bed,
+            ch_flu_b_vic_bed,
             ch_metadata
         )
         ch_versions = ch_versions.mix(PLOT_MULTIPANEL_COVERAGE_HEATMAP.out.versions)

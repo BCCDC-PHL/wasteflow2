@@ -9,13 +9,17 @@ import re
 HUMAN_CHR_REGEX = re.compile(r"^chr([0-9]+|X|Y|M|Un|KI|GL).*")
 
 # List of all Influenza accessions in your panel
-INFLUENZA_ACCESSIONS = [
+INFLUENZA_A_ACCESSIONS = [
     "NC_026438.1", "NC_026435.1", "NC_026437.1", "NC_026433.1",
     "NC_026436.1", "NC_026434.1", "NC_026431.1", "NC_026432.1",
     "NC_007373.1", "NC_007372.1", "NC_007371.1", "CY163680.1",
     "NC_007369.1", "CY114383.1", "NC_007367.1", "NC_007370.1",
     "NC_007357.1", "NC_007358.1", "NC_007359.1", "NC_007362.1",
     "NC_007360.1", "NC_007361.1", "NC_007363.1", "NC_007364.1"
+]
+INFLUENZA_B_VIC_ACCESSIONS = [
+    "CY115158.1", "CY115157.1", "CY115156.1", "KX058884.1", 
+    "CY115154.1", "CY073894.1", "CY115152.1", "CY115155.1" 
 ]
 
 SARS_COV_ACCESSION = "MN908947.3"
@@ -44,8 +48,10 @@ def classify_ref(ref, control_ref):
         return "Unmapped"
     if ref == control_ref:
         return "Control"
-    if ref in INFLUENZA_ACCESSIONS:
-        return "Influenza"
+    if ref in INFLUENZA_A_ACCESSIONS:
+        return "Influenza A"
+    if ref in INFLUENZA_B_VIC_ACCESSIONS:
+        return "Influenza B (Victoria)"
     if HUMAN_CHR_REGEX.match(ref):
         return "Human"
     if ref == SARS_COV_ACCESSION:
@@ -89,7 +95,8 @@ def main():
         "SARS-CoV-2",
         "RSV-B",
         "RSV-A",
-        "Influenza",
+        "Influenza A",
+        "Influenza B (Victoria)",
         "Control",
         "Human",
         "Unmapped",
@@ -102,9 +109,10 @@ def main():
         "SARS-CoV-2": "#1f77b4",
         "RSV-B": "#ff7f0e",
         "RSV-A": "#2ca02c",
-        "Influenza": "#d62728",
-        "Control": "#9467bd",
-        "Human": "#8c564b",
+        "Influenza A": "#d62728",
+        "Influenza B (Victoria)": "#9467bd",
+        "Control": "#e377c2",
+        "Human": "#bcbd22",
         "Unmapped": "#7f7f7f",
     }
     plot_colors = [colors[c] for c in category_order]

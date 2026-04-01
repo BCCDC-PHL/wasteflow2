@@ -7,7 +7,7 @@ include { SEQKIT_STATS as SEQKIT_STATS_SEROTYPES } from '../../modules/nf-core/s
 include { ASSIGN_SEROTYPES                       } from '../../modules/local/assign_serotypes.nf'
 
 
-workflow INFLUENZA_SEROTYPING {
+workflow INFLUENZA_A_SEROTYPING {
     take:
     ch_all_extracted_reads // channel: [meta, reads] - flu samples from branched reads
 
@@ -19,20 +19,20 @@ workflow INFLUENZA_SEROTYPING {
     ch_read_summary = Channel.empty()
 
     // Create channels for database files with validation
-    ch_flu_db_fasta = Channel.fromPath(params.flu_db_fasta, checkIfExists: true)
-        .ifEmpty { error("Flu database FASTA file not found: ${params.flu_db_fasta}") }
+    ch_flu_a_db_fasta = Channel.fromPath(params.flu_a_db_fasta, checkIfExists: true)
+        .ifEmpty { error("Flu database FASTA file not found: ${params.flu_a_db_fasta}") }
 
-    ch_flu_db_info = Channel.fromPath(params.flu_db_info, checkIfExists: true)
-        .ifEmpty { error("Flu database info file not found: ${params.flu_db_info}") }
+    ch_flu_a_db_info = Channel.fromPath(params.flu_a_db_info, checkIfExists: true)
+        .ifEmpty { error("Flu database info file not found: ${params.flu_a_db_info}") }
 
     // Prepare flu samples from input channel
     ch_flu_reads = ch_all_extracted_reads
         .filter { meta, _reads ->
-            meta.taxid == '11308'
+            meta.taxid == '197911' // Filter for Influenza A taxid
         }
         .map { meta, reads ->
             def new_meta = meta.clone()
-            new_meta.genome = 'flu_db'
+            new_meta.genome = 'flu_a_db'
             [new_meta, reads]
         }
     
@@ -93,7 +93,7 @@ workflow INFLUENZA_SEROTYPING {
         }
 
     // Prepare database for MINIMAP2
-    ch_flu_db_fasta_meta = ch_flu_db_fasta.map { fasta -> [[id: 'flu_db'], fasta] }
+    ch_flu_a_db_fasta_meta = ch_flu_a_db_fasta.map { fasta -> [[id: 'flu_a_db'], fasta] }
 
     // Run MINIMAP2 alignment with cleaned reads
     bam_format = 'true'
@@ -102,7 +102,7 @@ workflow INFLUENZA_SEROTYPING {
     cigar_bam = 'false'
     MINIMAP2_ALIGN(
         ch_cleaned_reads,
-        ch_flu_db_fasta_meta.first(),
+        ch_flu_a_db_fasta_meta.first(),
         bam_format,
         bam_format_ext,
         cigar_paf_format,
@@ -112,7 +112,7 @@ workflow INFLUENZA_SEROTYPING {
 
     ASSIGN_SEROTYPES(
         MINIMAP2_ALIGN.out.bam,
-        ch_flu_db_info.first(),
+        ch_flu_a_db_info.first(),
     )
     
     ch_read_summary = ASSIGN_SEROTYPES.out.read_summary
