@@ -8,7 +8,8 @@ include { PREPARE_GENOME as PREPARE_GENOME_PANEL_CONTROL } from './prepare_genom
 include { PREPARE_GENOME as PREPARE_GENOME_H1N1         } from './prepare_genome'
 include { PREPARE_GENOME as PREPARE_GENOME_H3N2         } from './prepare_genome'
 include { PREPARE_GENOME as PREPARE_GENOME_H5N1         } from './prepare_genome'
-include { PREPARE_GENOME as PREPARE_GENOME_B_VIC         } from './prepare_genome'
+include { PREPARE_GENOME as PREPARE_GENOME_FLU_B_VIC         } from './prepare_genome'
+include { PREPARE_GENOME as PREPARE_GENOME_FLU_B_YAM         } from './prepare_genome'
 
 workflow GENOME_PREPARATION {
     main:
@@ -128,7 +129,7 @@ workflow GENOME_PREPARATION {
     )
 
     // B/Victoria genome preparation (SEGMENTED - has segment_gffs)
-    PREPARE_GENOME_B_VIC(
+    PREPARE_GENOME_FLU_B_VIC(
         'FLU-B-VIC',
         params.genomes['FLU-B-VIC'].fasta,
         null,                                                    // gff (null for segmented)
@@ -141,6 +142,21 @@ workflow GENOME_PREPARATION {
         params.genomes['FLU-B-VIC'].segment_gffs                     // segment_gffs map (NOT null = segmented)
     )
 
+    // B/Yamagata genome preparation (SEGMENTED - has segment_gffs)
+    PREPARE_GENOME_FLU_B_YAM(
+        'FLU-B-YAM',
+        params.genomes['FLU-B-YAM'].fasta,
+        null,                                                    // gff (null for segmented)
+        null,                                                    // primer_bed
+        null,                                                    // bowtie2_index
+        null,                                                    // nextclade_dataset
+        null,                                                    // nextclade_dataset_name
+        null,                                                    // nextclade_dataset_tag
+        params.genomes['FLU-B-YAM'].bed,                             // segments_bed
+        params.genomes['FLU-B-YAM'].segment_gffs                     // segment_gffs map (NOT null = segmented)
+    )
+
+
     ch_versions = ch_versions.mix(PREPARE_GENOME_SARS_COV2.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_RSV_A.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_RSV_B.out.versions)
@@ -149,7 +165,8 @@ workflow GENOME_PREPARATION {
     ch_versions = ch_versions.mix(PREPARE_GENOME_H1N1.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_H3N2.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_H5N1.out.versions)
-    ch_versions = ch_versions.mix(PREPARE_GENOME_B_VIC.out.versions)
+    ch_versions = ch_versions.mix(PREPARE_GENOME_FLU_B_VIC.out.versions)
+    ch_versions = ch_versions.mix(PREPARE_GENOME_FLU_B_YAM.out.versions)
 
     emit:
     sars_cov2_fasta                = PREPARE_GENOME_SARS_COV2.out.fasta
@@ -215,16 +232,28 @@ workflow GENOME_PREPARATION {
     h5n1_segment_snpeff_config     = PREPARE_GENOME_H5N1.out.segment_snpeff_config
 
     // B/Victoria outputs
-    b_vic_fasta                     = PREPARE_GENOME_B_VIC.out.fasta
-    b_vic_bowtie2_index             = PREPARE_GENOME_B_VIC.out.bowtie2_index
-    b_vic_fai                       = PREPARE_GENOME_B_VIC.out.fai
-    b_vic_chrom_sizes               = PREPARE_GENOME_B_VIC.out.chrom_sizes
-    b_vic_segment_fasta             = PREPARE_GENOME_B_VIC.out.segment_fasta
-    b_vic_segment_gff               = PREPARE_GENOME_B_VIC.out.segment_gff
-    b_vic_segment_fai               = PREPARE_GENOME_B_VIC.out.segment_fai
-    b_vic_segment_chrom_sizes       = PREPARE_GENOME_B_VIC.out.segment_chrom_sizes
-    b_vic_segment_snpeff_db         = PREPARE_GENOME_B_VIC.out.segment_snpeff_db
-    b_vic_segment_snpeff_config     = PREPARE_GENOME_B_VIC.out.segment_snpeff_config
+    b_vic_fasta                     = PREPARE_GENOME_FLU_B_VIC.out.fasta
+    b_vic_bowtie2_index             = PREPARE_GENOME_FLU_B_VIC.out.bowtie2_index
+    b_vic_fai                       = PREPARE_GENOME_FLU_B_VIC.out.fai
+    b_vic_chrom_sizes               = PREPARE_GENOME_FLU_B_VIC.out.chrom_sizes
+    b_vic_segment_fasta             = PREPARE_GENOME_FLU_B_VIC.out.segment_fasta
+    b_vic_segment_gff               = PREPARE_GENOME_FLU_B_VIC.out.segment_gff
+    b_vic_segment_fai               = PREPARE_GENOME_FLU_B_VIC.out.segment_fai
+    b_vic_segment_chrom_sizes       = PREPARE_GENOME_FLU_B_VIC.out.segment_chrom_sizes
+    b_vic_segment_snpeff_db         = PREPARE_GENOME_FLU_B_VIC.out.segment_snpeff_db
+    b_vic_segment_snpeff_config     = PREPARE_GENOME_FLU_B_VIC.out.segment_snpeff_config
+
+    // B/Yamagata outputs
+    b_yam_fasta                     = PREPARE_GENOME_FLU_B_YAM.out.fasta
+    b_yam_bowtie2_index             = PREPARE_GENOME_FLU_B_YAM.out.bowtie2_index
+    b_yam_fai                       = PREPARE_GENOME_FLU_B_YAM.out.fai
+    b_yam_chrom_sizes               = PREPARE_GENOME_FLU_B_YAM.out.chrom_sizes
+    b_yam_segment_fasta             = PREPARE_GENOME_FLU_B_YAM.out.segment_fasta
+    b_yam_segment_gff               = PREPARE_GENOME_FLU_B_YAM.out.segment_gff
+    b_yam_segment_fai               = PREPARE_GENOME_FLU_B_YAM.out.segment_fai
+    b_yam_segment_chrom_sizes       = PREPARE_GENOME_FLU_B_YAM.out.segment_chrom_sizes
+    b_yam_segment_snpeff_db         = PREPARE_GENOME_FLU_B_YAM.out.segment_snpeff_db
+    b_yam_segment_snpeff_config     = PREPARE_GENOME_FLU_B_YAM.out.segment_snpeff_config
     
     versions                       = ch_versions
 }

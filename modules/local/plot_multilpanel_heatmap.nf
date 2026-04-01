@@ -14,19 +14,24 @@ process PLOT_MULTIPANEL_COVERAGE_HEATMAP {
     tuple val(meta4), path(h1n1_coverage)
     tuple val(meta5), path(h3n2_coverage)
     tuple val(meta6), path(h5n1_coverage)
-    tuple val(meta7), path(sars_bed)
-    tuple val(meta8), path(rsv_a_bed)
-    tuple val(meta9), path(rsv_b_bed)
-    tuple val(meta10), path(h1n1_bed)
-    tuple val(meta11), path(h3n2_bed)
-    tuple val(meta12), path(h5n1_bed)
+    tuple val(meta7), path(flu_b_vic_coverage)
+    tuple val(meta8), path(sars_bed)
+    tuple val(meta9), path(rsv_a_bed)
+    tuple val(meta10), path(rsv_b_bed)
+    tuple val(meta11), path(h1n1_bed)
+    tuple val(meta12), path(h3n2_bed)
+    tuple val(meta13), path(h5n1_bed)
+    tuple val(meta14), path(flu_b_vic_bed)
     path metadata
 
     output:
     tuple val(meta), path("*_sarscov2_rsv.png"), emit: heatmap_sars
-    tuple val(meta4), path("*_influenza.png"), emit: heatmap_influenza
+    tuple val(meta4), path("*_influenza_A.png"), emit: heatmap_influenza_A
+    tuple val(meta7), path("*_influenza_B.png"), emit: heatmap_influenza_B
     tuple val(meta), path("*_sarscov2_rsv.tsv"), emit: tsv_sars
-    tuple val(meta4), path("*_influenza.tsv"), emit: tsv_influenza
+    tuple val(meta4), path("*_influenza_A.tsv"), emit: tsv_influenza_A
+    tuple val(meta7), path("*_influenza_B.tsv"), emit: tsv_influenza_B
+    
     path "versions.yml", emit: versions
 
     when:
@@ -42,6 +47,7 @@ process PLOT_MULTIPANEL_COVERAGE_HEATMAP {
     def h1n1_arg = h1n1_coverage ? "--h1n1 ${h1n1_coverage}" : ""
     def h3n2_arg = h3n2_coverage ? "--h3n2 ${h3n2_coverage}" : ""
     def h5n1_arg = h5n1_coverage ? "--h5n1 ${h5n1_coverage}" : ""
+    def flu_b_vic_arg = flu_b_vic_coverage ? "--flu_b_vic ${flu_b_vic_coverage}" : ""
 
 
     """
@@ -52,18 +58,22 @@ process PLOT_MULTIPANEL_COVERAGE_HEATMAP {
         ${h1n1_arg} \\
         ${h3n2_arg} \\
         ${h5n1_arg} \\
+        ${flu_b_vic_arg} \\
         --sars_bed ${sars_bed} \\
         --rsvA_bed ${rsv_a_bed} \\
         --rsvB_bed ${rsv_b_bed} \\
         --h1n1_bed ${h1n1_bed} \\
         --h3n2_bed ${h3n2_bed} \\
         --h5n1_bed ${h5n1_bed} \\
+        --flu_b_vic_bed ${flu_b_vic_bed} \\
         ${args} \\
         ${metadata_arg} \\
         --out_sarsrsv ${prefix}_sarscov2_rsv.png \\
-        --out_influenza ${prefix}_influenza.png \\
+        --out_influenza_a ${prefix}_influenza_A.png \\
+        --out_influenza_b ${prefix}_influenza_B.png \\
         --out_sarsrsv_tsv ${prefix}_sarscov2_rsv.tsv \\
-        --out_influenza_tsv ${prefix}_influenza.tsv
+        --out_influenza_a_tsv ${prefix}_influenza_A.tsv \\
+        --out_influenza_b_tsv ${prefix}_influenza_B.tsv 
         
 
     cat <<-END_VERSIONS > versions.yml

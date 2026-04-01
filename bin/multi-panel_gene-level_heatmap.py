@@ -200,20 +200,33 @@ def write_segment_coverage_tsv(df_breadth, df_cov, output_file, level_name="Segm
         df_c = df_c.reset_index()
         df_b = df_b.rename(columns={df_b.columns[0]: "Pathogen", df_b.columns[1]: "Segment"})
         df_c = df_c.rename(columns={df_c.columns[0]: "Pathogen", df_c.columns[1]: "Segment"})
+        sample_col_start = 2
     else:
-        df_b = df_b.reset_index().rename(columns={df_b.index.name: level_name})
-        df_c = df_c.reset_index().rename(columns={df_c.index.name: level_name})
+        # For single pathogen, reset index and use the index values as the level_name column
+        df_b = df_b.reset_index()
+        df_c = df_c.reset_index()
+        # Rename the first column (the old index) to level_name
+        df_b = df_b.rename(columns={df_b.columns[0]: level_name})
+        df_c = df_c.rename(columns={df_c.columns[0]: level_name})
+        sample_col_start = 1
 
     records = []
-    for _, row in df_b.iterrows():
-        for sample in df_b.columns[2:]:
-            records.append({
-                "Pathogen": row["Pathogen"] if "Pathogen" in row else pathogen_name,
-                "Segment": row["Segment"],
+    for idx, row in df_b.iterrows():
+        # Determine sample columns based on whether we have MultiIndex or not
+        if "Pathogen" in df_b.columns:
+            sample_cols = df_b.columns[2:]
+        else:
+            sample_cols = df_b.columns[1:]
+        
+        for sample in sample_cols:
+            record = {
+                "Pathogen": row.get("Pathogen", pathogen_name),
+                "Segment": row.get("Segment", row.get(level_name)),
                 "Sample": sample,
                 "percent_covered": round(row[sample], 1),
-                "mean_depth": round(df_c.loc[df_c.index[_], sample], 2)
-            })
+                "mean_depth": round(df_c.loc[idx, sample], 2)
+            }
+            records.append(record)
 
     df_out = pd.DataFrame(records)
     df_out.to_csv(output_file, sep="\t", index=False)
@@ -229,18 +242,23 @@ def main():
     parser.add_argument("--h1n1", help="H1N1 coverage file (mosdepth)")
     parser.add_argument("--h3n2", help="H3N2 coverage file (mosdepth)")
     parser.add_argument("--h5n1", help="H5N1 coverage file (mosdepth)")
+    parser.add_argument("--flu_b_vic", help="Influenza B/Victoria coverage file (mosdepth)")
     parser.add_argument("--sars_bed", required=True)
     parser.add_argument("--rsvA_bed", required=True)
     parser.add_argument("--rsvB_bed", required=True)
     parser.add_argument("--h1n1_bed", required=True)
     parser.add_argument("--h3n2_bed", required=True)
     parser.add_argument("--h5n1_bed", required=True)
+    parser.add_argument("--flu_b_vic_bed", required=True)
     parser.add_argument("--metadata", help="Optional metadata file (tsv)")
     parser.add_argument("--filter", nargs="+")
     parser.add_argument("--out_sarsrsv", required=True, help="Output figure for SARS/RSV")
-    parser.add_argument("--out_influenza", required=True, help="Output figure for Influenza")
+    parser.add_argument("--out_influenza_a", required=True, help="Output figure for Influenza A")
+    parser.add_argument("--out_influenza_b", required=True, help="Output figure for Influenza B")
     parser.add_argument("--out_sarsrsv_tsv", help="Output TSV for SARS/RSV coverage")
-    parser.add_argument("--out_influenza_tsv", help="Output TSV for Influenza coverage")
+    parser.add_argument("--out_influenza_a_tsv", help="Output TSV for Influenza A coverage")
+    parser.add_argument("--out_influenza_b_tsv", help="Output TSV for Influenza B coverage")
+
     args = parser.parse_args()
 
     # ----------------------
@@ -302,7 +320,7 @@ def main():
     plt.close(fig)
 
     # ----------------------
-    # Influenza
+    # Influenza A (H1N1, H3N2, H5N1)
     # ----------------------
     df_h1n1_cov, df_h1n1_breadth = load_or_empty(args.h1n1, args.h1n1_bed, sample_list, influenza=True)
     df_h3n2_cov, df_h3n2_breadth = load_or_empty(args.h3n2, args.h3n2_bed, sample_list, influenza=True)
@@ -312,14 +330,14 @@ def main():
     x_labels_h3n2 = generate_x_labels(df_h3n2_cov, meta_sorted)
     x_labels_h5n1 = generate_x_labels(df_h5n1_cov, meta_sorted)
 
-    if args.out_influenza_tsv:
+    if args.out_influenza_a_tsv:
         write_segment_coverage_tsv(pd.concat([df_h1n1_breadth, df_h3n2_breadth, df_h5n1_breadth],
                                              keys=["H1N1","H3N2","H5N1"],
                                              names=["Pathogen","Segment"]),
                                    pd.concat([df_h1n1_cov, df_h3n2_cov, df_h5n1_cov],
                                              keys=["H1N1","H3N2","H5N1"],
                                              names=["Pathogen","Segment"]),
-                                   args.out_influenza_tsv)
+                                   args.out_influenza_a_tsv)
 
     fig, axes = plt.subplots(3,1, figsize=(max(15, max(df_h1n1_cov.shape[1], df_h3n2_cov.shape[1], df_h5n1_cov.shape[1])*0.5), 12))
     plot_heatmap_with_breadth(df_h1n1_cov, df_h1n1_breadth, "Influenza A (H1N1)", ax=axes[0], bold_threshold=0.75, x_labels=x_labels_h1n1)
@@ -327,8 +345,26 @@ def main():
     plot_heatmap_with_breadth(df_h5n1_cov, df_h5n1_breadth, "Influenza A (H5N1)", ax=axes[2], bold_threshold=0.75, x_labels=x_labels_h5n1)
     fig.text(0.5,0.02,"Cells with black borders indicate segments where ≥75% of the segment has ≥5× coverage", ha="center", fontsize=10)
     plt.tight_layout(rect=[0,0.05,1,1])
-    plt.savefig(args.out_influenza, dpi=300)
+    plt.savefig(args.out_influenza_a, dpi=300)
     plt.close(fig)
+
+
+
+    # ----------------------
+    # Influenza B (Victoria lineage)
+
+    df_flu_b_vic_cov, df_flu_b_vic_breadth = load_or_empty(args.flu_b_vic, args.flu_b_vic_bed, sample_list, influenza=True)
+    x_labels_flu_b_vic = generate_x_labels(df_flu_b_vic_cov, meta_sorted)
+    if args.out_influenza_b_tsv:
+        write_segment_coverage_tsv(df_flu_b_vic_breadth, df_flu_b_vic_cov, args.out_influenza_b_tsv, level_name="Segment", pathogen_name="Influenza B/Victoria")
+    
+    fig, ax = plt.subplots(1,1, figsize=(max(15, df_flu_b_vic_cov.shape[1]*0.5), 6))
+    plot_heatmap_with_breadth(df_flu_b_vic_cov, df_flu_b_vic_breadth, "Influenza B/Victoria", ax=ax, bold_threshold=0.75, x_labels=x_labels_flu_b_vic)
+    fig.text(0.5,0.02,"Cells with black borders indicate segments where ≥75% of the segment has ≥5× coverage", ha="center", fontsize=10)
+    plt.tight_layout(rect=[0,0.05,1,1])
+    plt.savefig(args.out_influenza_b, dpi=300)
+    plt.close(fig)
+
 
 if __name__ == "__main__":
     main()

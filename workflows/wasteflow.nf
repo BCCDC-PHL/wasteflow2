@@ -21,7 +21,7 @@ include { ALIGNMENT               } from '../subworkflows/local/alignment_proces
 include { BAM_QC_METRICS          } from '../subworkflows/local/bam_qc_metrics'
 include { VARIANT_CALLING         } from '../subworkflows/local/variant_calling'
 include { FREYJA_ANALYSIS         } from '../subworkflows/local/freyja_analysis'
-include { INFLUENZA_SEROTYPING    } from '../subworkflows/local/influenza_serotyping'
+include { INFLUENZA_A_SEROTYPING    } from '../subworkflows/local/influenza_a_serotyping'
 include { CONTROL_OLIGO_QC        } from '../subworkflows/local/control_oligo_qc'
 include { VARIANTS_QC             } from '../subworkflows/local/variants_qc'
 
@@ -50,6 +50,13 @@ workflow WASTEFLOW {
     ch_samplesheet // channel: samplesheet read in from --input
 
     main:
+
+    ch_sars_bed = params.sars_cov2_bed ? Channel.fromPath(params.sars_cov2_bed).map { bed -> [[id: 'MN908947.3'], bed] } : Channel.empty()
+    ch_rsv_a_bed = params.rsv_a_bed ? Channel.fromPath(params.rsv_a_bed).map { bed -> [[id: 'PP109421.1'], bed] } : Channel.empty()
+    ch_rsv_b_bed = params.rsv_b_bed ? Channel.fromPath(params.rsv_b_bed).map { bed -> [[id: 'OP975389.1'], bed] } : Channel.empty()
+    ch_h1n1_bed = params.genomes['H1N1'].bed ? Channel.fromPath(params.genomes['H1N1'].bed ).map { bed -> [[id: 'H1N1'], bed] } : Channel.empty() 
+    ch_h3n2_bed = params.genomes['H3N2'].bed ? Channel.fromPath(params.genomes['H3N2'].bed ).map { bed -> [[id: 'H1N1'], bed] } : Channel.empty()
+    ch_h5n1_bed = params.genomes['H5N1'].bed ? Channel.fromPath(params.genomes['H5N1'].bed ).map { bed -> [[id: 'H5N1'], bed] } : Channel.empty()
 
 
     if (params.metadata) {
@@ -172,7 +179,7 @@ workflow WASTEFLOW {
         ch_h5n1_fasta = GENOME_PREPARATION.out.h5n1_fasta
         ch_h5n1_fai = GENOME_PREPARATION.out.h5n1_fai
         ch_h5n1_chrom_sizes = GENOME_PREPARATION.out.h5n1_chrom_sizes
-
+        
         // H5N1 - Segments
         ch_h5n1_segment_fasta = GENOME_PREPARATION.out.h5n1_segment_fasta
         ch_h5n1_segment_gff = GENOME_PREPARATION.out.h5n1_segment_gff
@@ -181,12 +188,32 @@ workflow WASTEFLOW {
         ch_h5n1_segment_snpeff_db = GENOME_PREPARATION.out.h5n1_segment_snpeff_db
         ch_h5n1_segment_snpeff_config = GENOME_PREPARATION.out.h5n1_segment_snpeff_config
 
+        // FLU B/VIC - Full genome
+        ch_flu_b_vic_fasta = GENOME_PREPARATION.out.b_vic_fasta
+        ch_flu_b_vic_fai = GENOME_PREPARATION.out.b_vic_fai
+        ch_flu_b_vic_chrom_sizes = GENOME_PREPARATION.out.b_vic_chrom_sizes
+
+        // FLU B/YAM - Full genome
+        ch_flu_b_yam_fasta = GENOME_PREPARATION.out.b_yam_fasta
+        ch_flu_b_yam_fai = GENOME_PREPARATION.out.b_yam_fai
+        ch_flu_b_yam_chrom_sizes = GENOME_PREPARATION.out.b_yam_chrom_sizes
+
+        // FLU B/VIC- Segments
         ch_flu_b_vic_segment_fasta = GENOME_PREPARATION.out.b_vic_segment_fasta
         ch_flu_b_vic_segment_gff = GENOME_PREPARATION.out.b_vic_segment_gff
         ch_flu_b_vic_segment_fai = GENOME_PREPARATION.out.b_vic_segment_fai
         ch_flu_b_vic_segment_chrom_sizes = GENOME_PREPARATION.out.b_vic_segment_chrom_sizes
         ch_flu_b_vic_segment_snpeff_db = GENOME_PREPARATION.out.b_vic_segment_snpeff_db
         ch_flu_b_vic_segment_snpeff_config = GENOME_PREPARATION.out.b_vic_segment_snpeff_config
+
+        // FLU B/YAM - Segments
+        ch_flu_b_yam_segment_fasta = GENOME_PREPARATION.out.b_yam_segment_fasta
+        ch_flu_b_yam_segment_gff = GENOME_PREPARATION.out.b_yam_segment_gff
+        ch_flu_b_yam_segment_fai = GENOME_PREPARATION.out.b_yam_segment_fai
+        ch_flu_b_yam_segment_chrom_sizes = GENOME_PREPARATION.out.b_yam_segment_chrom_sizes
+        ch_flu_b_yam_segment_snpeff_db = GENOME_PREPARATION.out.b_yam_segment_snpeff_db
+        ch_flu_b_yam_segment_snpeff_config = GENOME_PREPARATION.out.b_yam_segment_snpeff_config
+
 
         ch_versions = ch_versions.mix(GENOME_PREPARATION.out.versions)
         }
@@ -196,31 +223,38 @@ workflow WASTEFLOW {
         .mix(ch_h3n2_segment_fasta)
         .mix(ch_h5n1_segment_fasta)
         .mix(ch_flu_b_vic_segment_fasta)
+        .mix(ch_flu_b_yam_segment_fasta)
+        
 
     ch_all_segment_fai = ch_h1n1_segment_fai
         .mix(ch_h3n2_segment_fai)
         .mix(ch_h5n1_segment_fai)
         .mix(ch_flu_b_vic_segment_fai)
+        .mix(ch_flu_b_yam_segment_fai)
 
     ch_all_segment_gff = ch_h1n1_segment_gff
         .mix(ch_h3n2_segment_gff)
         .mix(ch_h5n1_segment_gff)
         .mix(ch_flu_b_vic_segment_gff)
+        .mix(ch_flu_b_yam_segment_gff)
     
     ch_all_segment_chrom_sizes = ch_h1n1_segment_chrom_sizes
         .mix(ch_h3n2_segment_chrom_sizes)
         .mix(ch_h5n1_segment_chrom_sizes)
         .mix(ch_flu_b_vic_segment_chrom_sizes)
+        .mix(ch_flu_b_yam_segment_chrom_sizes)
 
     ch_all_segment_snpeff_db = ch_h1n1_segment_snpeff_db
         .mix(ch_h3n2_segment_snpeff_db)
         .mix(ch_h5n1_segment_snpeff_db)
         .mix(ch_flu_b_vic_segment_snpeff_db)
+        .mix(ch_flu_b_yam_segment_snpeff_db)
 
     ch_all_segment_snpeff_config = ch_h1n1_segment_snpeff_config
         .mix(ch_h3n2_segment_snpeff_config)
         .mix(ch_h5n1_segment_snpeff_config)
         .mix(ch_flu_b_vic_segment_snpeff_config)
+        .mix(ch_flu_b_yam_segment_snpeff_config)
     
     // SARS-CoV-2
     // Remove the .map() - the channel is already [meta, db]
@@ -324,7 +358,8 @@ workflow WASTEFLOW {
 
     ch_all_extracted_reads = TAXONOMY_CLASSIFICATION.out.sars_cov2_reads
         .mix(TAXONOMY_CLASSIFICATION.out.rsv_reads)
-        .mix(TAXONOMY_CLASSIFICATION.out.flu_reads)
+        .mix(TAXONOMY_CLASSIFICATION.out.flu_a_reads)
+        .mix(TAXONOMY_CLASSIFICATION.out.flu_b_reads)
 
     //
     // SUBWORKFLOW: Influenza serotyping
@@ -332,11 +367,11 @@ workflow WASTEFLOW {
     
     influenza_serotype_reads = Channel.empty()
     if (!params.skip_influenza_serotyping) {
-        INFLUENZA_SEROTYPING(
+        INFLUENZA_A_SEROTYPING(
             ch_all_extracted_reads
         )
-        influenza_serotype_reads = INFLUENZA_SEROTYPING.out.serotype_reads
-        ch_versions = ch_versions.mix(INFLUENZA_SEROTYPING.out.versions)
+        influenza_serotype_reads = INFLUENZA_A_SEROTYPING.out.serotype_reads
+        ch_versions = ch_versions.mix(INFLUENZA_A_SEROTYPING.out.versions)
     }
     ch_all_extracted_reads = ch_all_extracted_reads.mix(influenza_serotype_reads)
     
@@ -353,7 +388,7 @@ workflow WASTEFLOW {
             ch_h1n1_fasta,
             ch_h3n2_fasta,
             ch_h5n1_fasta, 
-            ch_flu_b_vic_segment_fasta
+            ch_flu_b_vic_fasta
         )
         ch_versions = ch_versions.mix(ALIGNMENT.out.versions)
 
@@ -408,144 +443,145 @@ workflow WASTEFLOW {
     }
     
     
-    // Define influenza types and their BED files
-    def influenza_bed_files = [
-        'H1N1': params.genomes['H1N1'].bed,
-        'H3N2': params.genomes['H3N2'].bed,
-        'H5N1': params.genomes['H5N1'].bed
-    ]
+    // Parse all influenza BED files in a deterministic order
+    // This ensures consistent hashing for Nextflow caching/resume
+    def all_segment_info = []
 
-    // Parse all segment BED files
-    ch_all_segments = Channel.empty()
-
-    influenza_bed_files.each { virus, bed_path ->
-        def ch_temp = Channel
-            .fromPath(bed_path)
-            .splitCsv(sep: '\t', header: false)
-            .map { row -> 
-                [
-                    virus: virus,
-                    accession: row[0],
-                    segment: row[3]
-                ]
+    // Process influenza viruses in fixed order
+    ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC', 'FLU-B-YAM'].each { virus ->
+        def bed_path = params.genomes[virus]?.bed
+        if (bed_path) {
+            file(bed_path).eachLine { line ->
+                if (!line.startsWith('#') && line.trim()) {
+                    def fields = line.split('\t')
+                    if (fields.size() >= 4) {
+                        all_segment_info.add([
+                            virus: virus,
+                            accession: fields[0],
+                            segment: fields[3]
+                        ])
+                    }
+                }
             }
-        
-        ch_all_segments = ch_all_segments.mix(ch_temp)
+        }
     }
 
-    
+    // Create channel from parsed segment data
+    ch_all_segments = channel.of(all_segment_info).flatMap { it }
+
+    // Create a map of virus+segment -> accession for quick lookup
+    def segment_accession_map = [:]
+    all_segment_info.each { info ->
+        def key = "${info.virus}_${info.segment}"
+        segment_accession_map[key] = info.accession
+    }
+
+    // Add accession to segment FASTA metadata
+    ch_all_segment_fasta_with_accession = ch_all_segment_fasta
+        .map { meta, fasta ->
+            def lookup_key = "${meta.virus}_${meta.segment}"
+            def accession = segment_accession_map[lookup_key]
+            if (!accession) {
+                log.warn "No accession found for ${lookup_key}"
+            }
+            // Explicit construction
+            def new_meta = [
+                virus: meta.virus,
+                segment: meta.segment,
+                accession: accession
+            ]
+            [new_meta, fasta]
+        }
+
+    // Add accession to segment FAI metadata
+    ch_all_segment_fai_with_accession = ch_all_segment_fai
+        .map { meta, fai ->
+            def lookup_key = "${meta.virus}_${meta.segment}"
+            def accession = segment_accession_map[lookup_key]
+            // Explicit construction
+            def new_meta = [
+                virus: meta.virus,
+                segment: meta.segment,
+                accession: accession
+            ]
+            [new_meta, fai]
+        }
+
     // Filter influenza samples and split by segments
     ch_bam
-        .filter { meta, bam -> meta.genome in ['H1N1', 'H3N2', 'H5N1'] }
+        .filter { meta, bam -> meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC', 'FLU-B-YAM'] }
         .join(ch_bai, by: [0])
         .combine(ch_all_segments)
         .filter { meta, bam, bai, segment_info ->
             meta.genome == segment_info.virus
         }
         .map { meta, bam, bai, segment_info ->
-            def new_meta = meta.clone() + [
+            // Explicit map construction
+            def new_meta = [
+                id: meta.id,
+                genome: meta.genome,
+                single_end: meta.single_end,
+                taxid: meta.taxid,
                 segment: segment_info.segment,
                 segment_accession: segment_info.accession
             ]
             [new_meta, bam, bai, segment_info.accession, segment_info.segment]
         }
         .set { ch_influenza_bam_for_split }
-    
 
     SPLIT_BAM_BY_SEGMENT(ch_influenza_bam_for_split)
     ch_influenza_split_bam = SPLIT_BAM_BY_SEGMENT.out.bam
-    
-    
+
+
     //
     // MODULE: Reheader segment BAMs to match segment-specific references
     //
-    
-    // Sort all channels deterministically for reproducible matching
-    ch_all_segment_fasta
-        .toSortedList { a, b -> 
-            def keyA = "${a[0].virus}_${a[0].segment}"
-            def keyB = "${b[0].virus}_${b[0].segment}"
-            keyA <=> keyB
-        }
-        .flatMap { it }
-        .set { ch_sorted_segment_fasta }
-    
-    ch_all_segment_fai
-        .toSortedList { a, b -> 
-            def keyA = "${a[0].virus}_${a[0].segment}"
-            def keyB = "${b[0].virus}_${b[0].segment}"
-            keyA <=> keyB
-        }
-        .flatMap { it }
-        .set { ch_sorted_segment_fai }
-    
-    // Sort split BAM outputs deterministically
+
+    // Step 1: Join BAM and BAI (always deterministic)
     ch_influenza_split_bam
-        .toSortedList { a, b ->
-            def keyA = "${a[0].id}_${a[0].genome}_${a[0].segment}"
-            def keyB = "${b[0].id}_${b[0].genome}_${b[0].segment}"
-            keyA <=> keyB
-        }
-        .flatMap { it }
-        .set { ch_sorted_split_bam }
-    
-    SPLIT_BAM_BY_SEGMENT.out.bai
-        .toSortedList { a, b ->
-            def keyA = "${a[0].id}_${a[0].genome}_${a[0].segment}"
-            def keyB = "${b[0].id}_${b[0].genome}_${b[0].segment}"
-            keyA <=> keyB
-        }
-        .flatMap { it }
-        .set { ch_sorted_split_bai }
-    
-    // Create deterministic reference pairs [ref_meta, fasta, fai]
-    ch_sorted_segment_fasta
-        .combine(ch_sorted_segment_fai)
-        .filter { fasta_meta, fasta, fai_meta, fai ->
-            fasta_meta.virus == fai_meta.virus && fasta_meta.segment == fai_meta.segment
-        }
-        .map { fasta_meta, fasta, fai_meta, fai ->
-            [fasta_meta, fasta, fai]
+        .join(SPLIT_BAM_BY_SEGMENT.out.bai, by: [0])
+        .set { ch_split_bam_bai }
+
+    // Step 2: Create reference bundles (FASTA + FAI together from same source)
+    ch_all_segment_fasta_with_accession
+        .join(ch_all_segment_fai_with_accession, by: [0])
+        .map { meta, fasta, fai ->
+            // Ensure meta only has deterministic fields
+            def clean_meta = [
+                virus: meta.virus,
+                segment: meta.segment,
+                accession: meta.accession
+            ]
+            [clean_meta, fasta, fai]
         }
         .set { ch_segment_refs }
-    
-    // Match BAM with BAI
-    ch_sorted_split_bam
-        .combine(ch_sorted_split_bai)
-        .filter { bam_meta, bam, bai_meta, bai ->
-            bam_meta.id == bai_meta.id && 
-            bam_meta.genome == bai_meta.genome && 
-            bam_meta.segment == bai_meta.segment
-        }
-        .map { bam_meta, bam, bai_meta, bai ->
-            [bam_meta, bam, bai]
-        }
-        .set { ch_bam_bai_pairs }
-    
-    // Match with segment references
-    ch_bam_bai_pairs
+
+    // Step 3: Match BAMs with references - create single tuple for deterministic hashing
+    ch_split_bam_bai
         .combine(ch_segment_refs)
         .filter { bam_meta, bam, bai, ref_meta, fasta, fai ->
             bam_meta.genome == ref_meta.virus && bam_meta.segment == ref_meta.segment
         }
         .map { bam_meta, bam, bai, ref_meta, fasta, fai ->
-            // Extract segment accession as a simple value
-            def seg_acc = bam_meta.segment_accession ?: bam_meta.segment
+            // Clean the BAM meta to only include deterministic fields
+            def clean_bam_meta = [
+                id: bam_meta.id,
+                genome: bam_meta.genome,
+                segment: bam_meta.segment,
+                single_end: bam_meta.single_end ?: false,
+                taxid: bam_meta.taxid
+            ]
             
-            // Return tuple with all inputs
-            tuple(bam_meta, bam, bai, fasta, fai, seg_acc)
-        }
-        .multiMap { meta, bam, bai, fasta, fai, seg_acc ->
-            tuple_input: tuple(meta, bam, bai, fasta, fai)
-            seg_acc: seg_acc  // This will now be a clean scalar value
+            // Get segment accession as a clean string value
+            def seg_acc = ref_meta.accession.toString()
+            
+            // Return single tuple with ALL inputs (no multiMap!)
+            tuple(clean_bam_meta, bam, bai, fasta, fai, seg_acc)
         }
         .set { ch_reheader_inputs }
 
-        
-    REHEADER_SEGMENT_BAM(
-        ch_reheader_inputs.tuple_input,
-        ch_reheader_inputs.seg_acc
-    )
+    // Call process with single tuple channel
+    REHEADER_SEGMENT_BAM(ch_reheader_inputs)
 
     ch_versions = ch_versions.mix(REHEADER_SEGMENT_BAM.out.versions)
 
@@ -553,14 +589,14 @@ workflow WASTEFLOW {
     ch_bam_reheader = ch_bam
         .filter { meta, bam -> 
             // Keep only non-influenza samples (SARS-CoV-2, RSV-A, RSV-B)
-            !(meta.genome in ['H1N1', 'H3N2', 'H5N1'])
+            !(meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC', 'FLU-B-YAM'])
         }
         .mix(REHEADER_SEGMENT_BAM.out.bam)
 
     // Similarly for BAI
     ch_bai_reheader = ch_bai
         .filter { meta, bai -> 
-            !(meta.genome in ['H1N1', 'H3N2', 'H5N1'])
+            !(meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC', 'FLU-B-YAM'])
         }
         .mix(REHEADER_SEGMENT_BAM.out.bai)
 
@@ -660,7 +696,8 @@ workflow WASTEFLOW {
             ch_rsv_b_fasta,
             ch_h1n1_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first(),
             ch_h3n2_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first(),
-            ch_h5n1_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first()
+            ch_h5n1_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first(),
+            ch_flu_b_vic_segment_fasta.filter { meta, fasta -> meta.segment == 'HA' }.map { meta, fasta -> fasta }.first(),
         )
         ch_freyja_organized = FREYJA_ANALYSIS.out.freyja_organized
         ch_versions = ch_versions.mix(FREYJA_ANALYSIS.out.versions)

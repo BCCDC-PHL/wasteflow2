@@ -75,7 +75,9 @@ workflow TAXONOMY_CLASSIFICATION {
                 return tuple(meta, reads)
                 rsv: meta.taxid == '3049954'
                 return tuple(meta, reads)
-                flu: meta.taxid == '11308'
+                flu_A: meta.taxid == '197911'
+                return tuple(meta, reads)
+                flu_B: meta.taxid == '197912'
                 return tuple(meta, reads)
             }
             .set { branched_channels }
@@ -83,13 +85,15 @@ workflow TAXONOMY_CLASSIFICATION {
         // Assign branched channels to individual variables
         ch_sars_cov2 = branched_channels.sars_cov2
         ch_rsv = branched_channels.rsv
-        ch_flu = branched_channels.flu
+        ch_flu_a = branched_channels.flu_A
+        ch_flu_b = branched_channels.flu_B
     }
 
     emit:
     sars_cov2_reads = ch_sars_cov2 // channel: [meta, reads] - SARS-CoV-2 reads
     rsv_reads       = ch_rsv // channel: [meta, reads] - RSV reads
-    flu_reads       = ch_flu // channel: [meta, reads] - Influenza reads
+    flu_a_reads     = ch_flu_a // channel: [meta, reads] - Influenza A reads
+    flu_b_reads     = ch_flu_b // channel: [meta, reads] - Influenza B reads
     kraken2_multiqc = ch_kraken2_multiqc // channel: [meta, kraken2_report] - Kraken2 multiqc report
     versions        = ch_versions // channel: [meta, version] - workflow versions
 }

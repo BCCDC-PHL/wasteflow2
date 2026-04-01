@@ -7,7 +7,7 @@ include { SEQKIT_STATS as SEQKIT_STATS_SEROTYPES } from '../../modules/nf-core/s
 include { ASSIGN_SEROTYPES                       } from '../../modules/local/assign_serotypes.nf'
 
 
-workflow INFLUENZA_SEROTYPING {
+workflow INFLUENZA_A_SEROTYPING {
     take:
     ch_all_extracted_reads // channel: [meta, reads] - flu samples from branched reads
 
@@ -28,7 +28,7 @@ workflow INFLUENZA_SEROTYPING {
     // Prepare flu samples from input channel
     ch_flu_reads = ch_all_extracted_reads
         .filter { meta, _reads ->
-            meta.taxid == '11308'
+            meta.taxid == '197911' // Filter for Influenza A taxid
         }
         .map { meta, reads ->
             def new_meta = meta.clone()

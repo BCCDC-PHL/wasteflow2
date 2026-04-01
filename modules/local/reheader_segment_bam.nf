@@ -9,11 +9,11 @@ process REHEADER_SEGMENT_BAM {
     
     input:
     tuple val(meta), 
-          path(bam), 
-          path(bai), 
-          path(segment_fasta, stageAs: 'segment.fasta'), 
-          path(segment_fai, stageAs: 'segment.fasta.fai')
-    val(segment_accession)  // Explicit input for deterministic cache key
+        path(bam), 
+        path(bai), 
+        path(segment_fasta),  // Remove stageAs
+        path(segment_fai),    // Remove stageAs
+        val(segment_accession)
     
     output:
     tuple val(meta), path("${prefix}.bam"), emit: bam
@@ -26,56 +26,47 @@ process REHEADER_SEGMENT_BAM {
     script:
     def args = task.ext.args ?: ''
     prefix = task.ext.prefix ?: "${meta.id}.${meta.genome}.${meta.segment}"
-    
-    // Use the explicit segment_accession parameter for deterministic behavior
+
+    // Use the explicit segment_accession parameter
     def seg_name = segment_accession
-    
+
     """
-    # The split BAM has reads mapped to a specific segment, but the header
-    # contains all 8 segments and reads reference the original sequence ID (e.g., ID 4 for NP)
-    # We need to create a new BAM where reads map to the single-segment reference (ID 0)
-    
-    # Create new header with single segment reference
-    samtools view -H ${bam} | \\
-        grep -v "^@SQ" > header.sam
-    
-    # Construct @SQ header from FASTA index
-    # The .fai format is: name, length, offset, linebases, linewidth
-    awk 'BEGIN {OFS="\\t"} {print "@SQ", "SN:" \$1, "LN:" \$2}' segment.fasta.fai >> header.sam
-    
-    # Extract alignments and update reference name to match segment
+    # ABSOLUTE DETERMINISTIC VERSION
+    # All operations use explicit file names (no auto-generated temp files)
+
+    # Step 1: Create header
+    samtools view -H ${bam} | grep -v "^@SQ" > header.sam
+    awk 'BEGIN {OFS="\\t"} {print "@SQ", "SN:" \$1, "LN:" \$2}' ${segment_fai} >> header.sam
+
+    # Step 2: Extract and update alignments
     samtools view ${bam} | \\
         awk -v seg="${seg_name}" 'BEGIN {OFS="\\t"} {
             \$3 = seg
             print
         }' > alignments.sam
-    
-    # Combine header and alignments
+
+    # Step 3: Combine to unsorted BAM
     cat header.sam alignments.sam | \\
-        samtools view -b -t segment.fasta.fai - | \\
-        samtools sort -o ${prefix}.bam -
-    
-    # Index the final BAM
+        samtools view -b -l 6 -t segment.fasta.fai -o unsorted.bam -
+
+    # Step 4: Sort with MAXIMUM determinism
+    # Key: Use current directory as temp location to avoid path issues
+    samtools sort \\
+        --threads 1 \\
+        -l 6 \\
+        -m 768M \\
+        -o ${prefix}.bam \\
+        unsorted.bam
+
+    # Step 5: Index
     samtools index ${prefix}.bam
-    
-    # Clean up intermediate files
-    rm -f header.sam alignments.sam
-    
+
+    # Clean up
+    rm -f header.sam alignments.sam unsorted.bam
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
-    END_VERSIONS
-    """
-    
-    stub:
-    prefix = task.ext.prefix ?: "${meta.id}.${meta.genome}.${meta.segment}"
-    """
-    touch ${prefix}.bam
-    touch ${prefix}.bam.bai
-    
-    cat <<-END_VERSIONS > versions.yml
-    "${task.process}":
-        samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//)' 
     END_VERSIONS
     """
 }
