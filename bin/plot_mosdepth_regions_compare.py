@@ -61,6 +61,16 @@ def plot_coverage_with_annotations(file_path, pathogen="sars-cov-2", prefix="out
             ("M2", 7078, 7894),
             ("L", 7895, 15132),
         ]
+    elif pathogen.lower() == "measles":
+        gene_annotations = [
+            ("N", 55, 1744),
+            ("P", 1747, 3402),
+            ("M", 3405, 4872),
+            ("F", 4875, 7247),
+            ("H", 7250, 9208),
+            ("L", 9211, 15854),
+        ]
+
     else:
         raise ValueError(f"Unknown pathogen: {pathogen}")
 
@@ -199,7 +209,7 @@ def main():
     parser.add_argument(
         "--pathogen",
         required=True,
-        choices=["sars-cov-2", "rsva", "rsvb"],
+        choices=["sars-cov-2", "rsva", "rsvb", "measles"],
         help="Pathogen type",
     )
     parser.add_argument("--prefix", required=True, help="Prefix for output file")
