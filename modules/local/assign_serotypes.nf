@@ -28,8 +28,7 @@ process ASSIGN_SEROTYPES {
         --db-info ${db_info} \\
         --sample ${prefix} \\
         --outdir . \\
-        --score-thresh ${score_threshold} \\
-        ${args}
+        --score-thresh ${score_threshold} 
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
