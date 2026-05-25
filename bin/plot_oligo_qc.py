@@ -139,6 +139,7 @@ def main():
 
     ax.set_ylabel("Proportion of reads")
     plt.xticks(rotation=90, ha="right")
+    plt.yticks(rotation=90, ha="right")
     ax.legend(category_order, loc="center left", bbox_to_anchor=(1, 0.5))
 
     # ---- Bottom title ----
