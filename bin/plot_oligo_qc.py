@@ -25,6 +25,8 @@ INFLUENZA_B_VIC_ACCESSIONS = [
 SARS_COV_ACCESSION = "MN908947.3"
 RSV_A_ACCESSION = "PP109421.1"
 RSV_B_ACCESSION = "OP975389.1"
+MEASLES_ACCESSION = "NC_001498.1"
+
 
 
 def parse_args():
@@ -60,6 +62,8 @@ def classify_ref(ref, control_ref):
         return "RSV-A"
     if ref == RSV_B_ACCESSION:
         return "RSV-B"
+    if ref == MEASLES_ACCESSION:
+        return "Measles"
     return ref
 
 
@@ -97,6 +101,7 @@ def main():
         "RSV-A",
         "Influenza A",
         "Influenza B (Victoria)",
+        "Measles",
         "Control",
         "Human",
         "Unmapped",
@@ -111,6 +116,7 @@ def main():
         "RSV-A": "#2ca02c",
         "Influenza A": "#d62728",
         "Influenza B (Victoria)": "#9467bd",
+        "Measles": "#8c564b",
         "Control": "#e377c2",
         "Human": "#bcbd22",
         "Unmapped": "#7f7f7f",
