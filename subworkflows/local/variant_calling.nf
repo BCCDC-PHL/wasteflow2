@@ -3,6 +3,7 @@
 include { VARIANTS_IVAR as VARIANTS_IVAR_SARS_COV2 } from './variants_ivar'
 include { VARIANTS_IVAR as VARIANTS_IVAR_RSV_A     } from './variants_ivar'
 include { VARIANTS_IVAR as VARIANTS_IVAR_RSV_B     } from './variants_ivar'
+include { VARIANTS_IVAR as VARIANTS_IVAR_MEASLES     } from './variants_ivar'
 include { VARIANTS_IVAR as VARIANTS_IVAR_INFLUENZA_SEGMENTS } from './variants_ivar'
 include { VARIANTS_LONG_TABLE                      } from './variants_long_table'
 
@@ -21,6 +22,10 @@ workflow VARIANT_CALLING {
     rsv_b_fai               // channel: fai
     rsv_b_chrom_sizes       // channel: chrom_sizes
     rsv_b_gff               // channel: gff
+    measles_wt_fasta        // channel: fasta for measles wild-type
+    measles_wt_fai          // channel: fai for measles wild-type
+    measles_wt_chrom_sizes  // channel: chrom_sizes for measles wild-type
+    measles_wt_gff          // channel: gff for measles wild-type
     ch_segment_fasta        // channel: fasta for all influenza segments
     ch_segment_fai          // channel: fai for all influenza segments
     ch_segment_chrom_sizes  // channel: chrom_sizes for all influenza segments
@@ -41,7 +46,9 @@ workflow VARIANT_CALLING {
                 return [meta, bam]
             rsv_b: meta.genome == 'OP975389.1'
                 return [meta, bam]
-            segments: meta.genome in ['H1N1', 'H3N2', 'H5N1'] && meta.containsKey('segment')
+            measles: meta.genome == 'NC_001498.1'
+                return [meta, bam]
+            segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC', 'FLU-B-YAM'] && meta.containsKey('segment')
                 return [meta, bam]
         }
         .set { bam_by_type }
@@ -75,6 +82,17 @@ workflow VARIANT_CALLING {
         rsv_b_gff,
         ch_ivar_variants_header_mqc,
     )
+
+    // Measles wild-type variant calling
+    VARIANTS_IVAR_MEASLES(
+        bam_by_type.measles,
+        measles_wt_fasta,
+        measles_wt_fai,
+        measles_wt_chrom_sizes,
+        measles_wt_gff,
+        ch_ivar_variants_header_mqc,
+    )
+
 
     // Influenza segments variant calling
     // Join segment BAMs with their corresponding references
@@ -157,30 +175,36 @@ workflow VARIANT_CALLING {
     ch_versions = ch_versions.mix(VARIANTS_IVAR_SARS_COV2.out.versions)
     ch_versions = ch_versions.mix(VARIANTS_IVAR_RSV_A.out.versions)
     ch_versions = ch_versions.mix(VARIANTS_IVAR_RSV_B.out.versions)
+    ch_versions = ch_versions.mix(VARIANTS_IVAR_MEASLES.out.versions)
     ch_versions = ch_versions.mix(VARIANTS_IVAR_INFLUENZA_SEGMENTS.out.versions)
 
     // Mix all VCFs from different virus types
     def ch_all_vcf = VARIANTS_IVAR_SARS_COV2.out.vcf
         .mix(VARIANTS_IVAR_RSV_A.out.vcf)
         .mix(VARIANTS_IVAR_RSV_B.out.vcf)
+        .mix(VARIANTS_IVAR_MEASLES.out.vcf)
         .mix(VARIANTS_IVAR_INFLUENZA_SEGMENTS.out.vcf)
+
 
     // Mix all TBIs from different virus types
     def ch_all_tbi = VARIANTS_IVAR_SARS_COV2.out.tbi
         .mix(VARIANTS_IVAR_RSV_A.out.tbi)
         .mix(VARIANTS_IVAR_RSV_B.out.tbi)
+        .mix(VARIANTS_IVAR_MEASLES.out.tbi)
         .mix(VARIANTS_IVAR_INFLUENZA_SEGMENTS.out.tbi)
 
     // Mix all iVar counts for MultiQC
     def ch_all_ivar_counts_multiqc = VARIANTS_IVAR_SARS_COV2.out.multiqc_tsv
         .mix(VARIANTS_IVAR_RSV_A.out.multiqc_tsv)
         .mix(VARIANTS_IVAR_RSV_B.out.multiqc_tsv)
+        .mix(VARIANTS_IVAR_MEASLES.out.multiqc_tsv)
         .mix(VARIANTS_IVAR_INFLUENZA_SEGMENTS.out.multiqc_tsv)
 
     // Mix all BCFtools stats for MultiQC
     def ch_all_bcftools_stats_multiqc = VARIANTS_IVAR_SARS_COV2.out.stats
         .mix(VARIANTS_IVAR_RSV_A.out.stats)
         .mix(VARIANTS_IVAR_RSV_B.out.stats)
+        .mix(VARIANTS_IVAR_MEASLES.out.stats)
         .mix(VARIANTS_IVAR_INFLUENZA_SEGMENTS.out.stats)
 
     emit:
