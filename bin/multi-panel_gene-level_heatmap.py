@@ -34,17 +34,43 @@ def load_bed(file_path):
         na_filter=False
     )
 
-def normalize_sample_name(s, influenza=False):
-    """Extract base sample name without segment/subtype suffixes"""
-    match = re.match(r"(WW\d{2}-\d{3,4})", s)
-    if match:
-        return match.group(1)
-    match2 = re.match(r"(Undetermined_S\d+)", s)
-    if match2:
-        return match2.group(1)
+def normalize_sample_name(s, strict=False, influenza=False):
+    """
+    Normalize sample names.
+
+    strict=True  → original WW-specific behavior
+    strict=False → generic suffix stripping (recommended default)
+    """
+
+    if strict:
+        # --- EXISTING BEHAVIOR (unchanged) ---
+        match = re.match(r"(WW\d{2}-\d{3,4})", s)
+        if match:
+            return match.group(1)
+
+        match2 = re.match(r"(Undetermined_S\d+)", s)
+        if match2:
+            return match2.group(1)
+
+        return s
+
+    # --- FLEXIBLE MODE (new default) ---
+
+    # Remove FASTQ suffixes
+    s = re.sub(r"(_L\d{3})?(_R[12])(_\d{3})?$", "", s)
+
+    # Remove seqkit split suffix
+    s = re.sub(r"\.part_\d+", "", s)
+
+    # Remove influenza subtype suffix
+    s = re.sub(r"_(H1N1|H3N2|H5N1|fluB|vic|yam)(?=_|$)", "", s, flags=re.IGNORECASE)
+
+    # Remove segment names
+    s =re.sub(r"_(HA|NA|NP|PB1|PB2|PA|M|NS)(?=_|$)", "", s, flags=re.IGNORECASE)
+
     return s
 
-def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None):
+def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None, strict=False):
     """Compute mean depth and breadth for influenza segments"""
     mosdepth_df = mosdepth_df.copy()
     
@@ -52,7 +78,7 @@ def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None):
     chrom_to_segment = dict(zip(bed_df['chrom'], bed_df['gene']))
     mosdepth_df['segment'] = mosdepth_df['chrom'].map(chrom_to_segment)
     
-    mosdepth_df['base_sample'] = mosdepth_df['sample'].apply(lambda x: normalize_sample_name(x, influenza=True))
+    mosdepth_df['base_sample'] = mosdepth_df['sample'].apply(lambda x: normalize_sample_name(x, strict=strict, influenza=True))
     
     grouped = mosdepth_df.groupby(['segment', 'base_sample', 'chrom', 'start', 'end'])['coverage'].mean().reset_index()
     
@@ -93,17 +119,17 @@ def compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order=None):
     
     return df_cov, df_breadth
 
-def compute_gene_coverage(mosdepth_df, bed_df, sample_order=None, influenza=False):
+def compute_gene_coverage(mosdepth_df, bed_df, sample_order=None, influenza=False, strict=False):
     """Compute mean depth and percent coverage for all viruses"""
     if influenza:
-        return compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order)
+        return compute_gene_coverage_influenza(mosdepth_df, bed_df, sample_order, strict=strict)
     
     df_wide = mosdepth_df.pivot_table(
         index=["chrom", "start", "end"], columns="sample", values="coverage"
     ).reset_index()
     
     cov_cols = df_wide.columns[3:]
-    cov_cols_clean = [normalize_sample_name(c) for c in cov_cols]
+    cov_cols_clean = [normalize_sample_name(c, strict=strict) for c in cov_cols]
     df_wide.rename(columns=dict(zip(cov_cols, cov_cols_clean)), inplace=True)
     
     df_numeric = df_wide.iloc[:, 3:]
@@ -182,11 +208,11 @@ def plot_heatmap_with_breadth(df_cov, df_breadth, pathogen_name, ax=None, vmin=5
                 rect = Rectangle((j, i), 1, 1, fill=False, edgecolor="black", lw=2.5)
                 ax.add_patch(rect)
 
-def load_or_empty(cov_file, bed_file, sample_list, influenza=False):
+def load_or_empty(cov_file, bed_file, sample_list, influenza=False, strict=False):
     if cov_file and os.path.exists(cov_file):
         mosdepth_df = load_mosdepth(cov_file)
         bed_df = load_bed(bed_file)
-        return compute_gene_coverage(mosdepth_df, bed_df, sample_list, influenza=influenza)
+        return compute_gene_coverage(mosdepth_df, bed_df, sample_list, influenza=influenza, strict=strict)
     return make_empty_gene_df(bed_file, sample_list)
 
 def write_segment_coverage_tsv(df_breadth, df_cov, output_file, level_name="Segment", pathogen_name=None):
@@ -243,6 +269,7 @@ def main():
     parser.add_argument("--h3n2", help="H3N2 coverage file (mosdepth)")
     parser.add_argument("--h5n1", help="H5N1 coverage file (mosdepth)")
     parser.add_argument("--flu_b_vic", help="Influenza B/Victoria coverage file (mosdepth)")
+    parser.add_argument("--measles", help="Measles coverage file (mosdepth)")
     parser.add_argument("--sars_bed", required=True)
     parser.add_argument("--rsvA_bed", required=True)
     parser.add_argument("--rsvB_bed", required=True)
@@ -250,16 +277,18 @@ def main():
     parser.add_argument("--h3n2_bed", required=True)
     parser.add_argument("--h5n1_bed", required=True)
     parser.add_argument("--flu_b_vic_bed", required=True)
+    parser.add_argument("--measles_bed", required=True)
     parser.add_argument("--metadata", help="Optional metadata file (tsv)")
+    parser.add_argument("--strict_sample_names", action="store_true", help="Use strict sample name parsing (WW-specific)")
     parser.add_argument("--filter", nargs="+")
-    parser.add_argument("--out_sarsrsv", required=True, help="Output figure for SARS/RSV")
+    parser.add_argument("--out_sars_rsv_measles", required=True, help="Output figure for SARS/RSV and Measles")
     parser.add_argument("--out_influenza_a", required=True, help="Output figure for Influenza A")
     parser.add_argument("--out_influenza_b", required=True, help="Output figure for Influenza B")
-    parser.add_argument("--out_sarsrsv_tsv", help="Output TSV for SARS/RSV coverage")
+    parser.add_argument("--out_sars_rsv_measles_tsv", help="Output TSV for SARS/RSV and Measles coverage")
     parser.add_argument("--out_influenza_a_tsv", help="Output TSV for Influenza A coverage")
     parser.add_argument("--out_influenza_b_tsv", help="Output TSV for Influenza B coverage")
-
     args = parser.parse_args()
+
 
     # ----------------------
     # Determine sample order
@@ -286,45 +315,48 @@ def main():
                 df_temp = load_mosdepth(cov)
                 is_influenza = any(x in cov for x in ['h1n1', 'h3n2', 'h5n1'])
                 samples = df_temp['sample'].unique()
-                sample_list = sorted(list(set([normalize_sample_name(s, influenza=is_influenza) for s in samples])))
+                sample_list = sorted(list(set([normalize_sample_name(s, strict=args.strict_sample_names, influenza=is_influenza)for s in samples])))
                 break
         meta_sorted = None
 
     # ----------------------
-    # SARS/RSV
+    # SARS/RSV/Measles
     # ----------------------
-    df_sars_cov, df_sars_breadth = load_or_empty(args.sars, args.sars_bed, sample_list, influenza=False)
-    df_rsvA_cov, df_rsvA_breadth = load_or_empty(args.rsvA, args.rsvA_bed, sample_list, influenza=False)
-    df_rsvB_cov, df_rsvB_breadth = load_or_empty(args.rsvB, args.rsvB_bed, sample_list, influenza=False)
+    df_sars_cov, df_sars_breadth = load_or_empty(args.sars, args.sars_bed, sample_list, influenza=False, strict=args.strict_sample_names)
+    df_rsvA_cov, df_rsvA_breadth = load_or_empty(args.rsvA, args.rsvA_bed, sample_list, influenza=False, strict=args.strict_sample_names)
+    df_rsvB_cov, df_rsvB_breadth = load_or_empty(args.rsvB, args.rsvB_bed, sample_list, influenza=False, strict=args.strict_sample_names)
+    df_measles_cov, df_measles_breadth = load_or_empty(args.measles, args.measles_bed, sample_list, influenza=False, strict=args.strict_sample_names)
 
     x_labels_sars = generate_x_labels(df_sars_cov, meta_sorted)
     x_labels_rsvA = generate_x_labels(df_rsvA_cov, meta_sorted)
     x_labels_rsvB = generate_x_labels(df_rsvB_cov, meta_sorted)
+    x_labels_measles = generate_x_labels(df_measles_cov, meta_sorted)
 
-    if args.out_sarsrsv_tsv:
-        write_segment_coverage_tsv(pd.concat([df_sars_breadth, df_rsvA_breadth, df_rsvB_breadth],
-                                             keys=["SARS-CoV-2","RSV-A","RSV-B"],
+    if args.out_sars_rsv_measles_tsv:
+        write_segment_coverage_tsv(pd.concat([df_sars_breadth, df_rsvA_breadth, df_rsvB_breadth, df_measles_breadth],
+                                             keys=["SARS-CoV-2","RSV-A","RSV-B","Measles"],
                                              names=["Pathogen","Gene"]),
-                                   pd.concat([df_sars_cov, df_rsvA_cov, df_rsvB_cov],
-                                             keys=["SARS-CoV-2","RSV-A","RSV-B"],
+                                   pd.concat([df_sars_cov, df_rsvA_cov, df_rsvB_cov, df_measles_cov],
+                                             keys=["SARS-CoV-2","RSV-A","RSV-B","Measles"],
                                              names=["Pathogen","Gene"]),
-                                   args.out_sarsrsv_tsv)
+                                   args.out_sars_rsv_measles_tsv)
 
-    fig, axes = plt.subplots(3,1, figsize=(max(15, max(df_sars_cov.shape[1], df_rsvA_cov.shape[1], df_rsvB_cov.shape[1])*0.5), 12))
+    fig, axes = plt.subplots(4,1, figsize=(max(15, max(df_sars_cov.shape[1], df_rsvA_cov.shape[1], df_rsvB_cov.shape[1], df_measles_cov.shape[1])*0.5), 16))
     plot_heatmap_with_breadth(df_sars_cov, df_sars_breadth, "SARS-CoV-2", ax=axes[0], x_labels=x_labels_sars)
     plot_heatmap_with_breadth(df_rsvA_cov, df_rsvA_breadth, "RSV-A", ax=axes[1], x_labels=x_labels_rsvA)
     plot_heatmap_with_breadth(df_rsvB_cov, df_rsvB_breadth, "RSV-B", ax=axes[2], x_labels=x_labels_rsvB)
+    plot_heatmap_with_breadth(df_measles_cov, df_measles_breadth, "Measles", ax=axes[3], x_labels=x_labels_measles)
     fig.text(0.5,0.02,"Cells with black borders indicate genes where ≥75% of the gene has ≥5× coverage", ha="center", fontsize=10)
     plt.tight_layout(rect=[0,0.05,1,1])
-    plt.savefig(args.out_sarsrsv, dpi=300)
+    plt.savefig(args.out_sars_rsv_measles, dpi=300)
     plt.close(fig)
 
     # ----------------------
     # Influenza A (H1N1, H3N2, H5N1)
     # ----------------------
-    df_h1n1_cov, df_h1n1_breadth = load_or_empty(args.h1n1, args.h1n1_bed, sample_list, influenza=True)
-    df_h3n2_cov, df_h3n2_breadth = load_or_empty(args.h3n2, args.h3n2_bed, sample_list, influenza=True)
-    df_h5n1_cov, df_h5n1_breadth = load_or_empty(args.h5n1, args.h5n1_bed, sample_list, influenza=True)
+    df_h1n1_cov, df_h1n1_breadth = load_or_empty(args.h1n1, args.h1n1_bed, sample_list, influenza=True, strict=args.strict_sample_names)
+    df_h3n2_cov, df_h3n2_breadth = load_or_empty(args.h3n2, args.h3n2_bed, sample_list, influenza=True, strict=args.strict_sample_names)
+    df_h5n1_cov, df_h5n1_breadth = load_or_empty(args.h5n1, args.h5n1_bed, sample_list, influenza=True, strict=args.strict_sample_names)
 
     x_labels_h1n1 = generate_x_labels(df_h1n1_cov, meta_sorted)
     x_labels_h3n2 = generate_x_labels(df_h3n2_cov, meta_sorted)
@@ -348,12 +380,10 @@ def main():
     plt.savefig(args.out_influenza_a, dpi=300)
     plt.close(fig)
 
-
-
     # ----------------------
     # Influenza B (Victoria lineage)
 
-    df_flu_b_vic_cov, df_flu_b_vic_breadth = load_or_empty(args.flu_b_vic, args.flu_b_vic_bed, sample_list, influenza=True)
+    df_flu_b_vic_cov, df_flu_b_vic_breadth = load_or_empty(args.flu_b_vic, args.flu_b_vic_bed, sample_list, influenza=True, strict=args.strict_sample_names)
     x_labels_flu_b_vic = generate_x_labels(df_flu_b_vic_cov, meta_sorted)
     if args.out_influenza_b_tsv:
         write_segment_coverage_tsv(df_flu_b_vic_breadth, df_flu_b_vic_cov, args.out_influenza_b_tsv, level_name="Segment", pathogen_name="Influenza B/Victoria")
