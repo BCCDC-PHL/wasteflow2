@@ -10,6 +10,7 @@ include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H1N1            } from '.
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H3N2            } from './fastq_align_minimap2'
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_H5N1            } from './fastq_align_minimap2'
 include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_FLU_B_VIC       } from './fastq_align_minimap2'
+include { FASTQ_ALIGN_MINIMAP2 as FASTQ_ALIGN_MINIMAP2_MEASLES      } from './fastq_align_minimap2'
 
 
 // Import modules
@@ -31,6 +32,8 @@ workflow ALIGNMENT {
     h3n2_fasta             // channel: H3N2 fasta
     h5n1_fasta             // channel: H5N1 fasta
     flu_b_vic_fasta         // channel: Flu B Victoria fasta
+    ch_measles_wt_fasta     // channel: Measles WT fasta
+    
 
     main:
     ch_versions = Channel.empty()
@@ -119,6 +122,18 @@ workflow ALIGNMENT {
             new_meta.genome = 'FLU-B-VIC'
             [new_meta, reads]
         }
+
+    ch_measles = ch_all_extracted_reads
+        .filter { meta, reads ->
+            def is_measles = meta.taxid == '3052345'
+            return is_measles
+        }
+        .map { meta, reads ->
+            def new_meta = meta.clone()
+            new_meta.genome = 'NC_001498.1'
+            [new_meta, reads]
+        }
+
     // Run SARS-CoV-2 alignment
     FASTQ_ALIGN_MINIMAP2_SARS_COV2(
         ch_sars_cov2_samples,
@@ -154,6 +169,12 @@ workflow ALIGNMENT {
         flu_b_vic_fasta.map { fasta -> [[id: 'FLU-B-VIC'], fasta] },
     )
 
+    FASTQ_ALIGN_MINIMAP2_MEASLES(
+        ch_measles,
+        ch_measles_wt_fasta.map { fasta -> [[id: 'NC_001498.1'], fasta] },
+    )
+
+
     ch_versions = ch_versions.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.versions)
 
     // Mix SARS-CoV-2 and Influenza outputs
@@ -162,16 +183,19 @@ workflow ALIGNMENT {
     ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.bam)
     ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.bam)
     ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_FLU_B_VIC.out.bam)
+    ch_bam = ch_bam.mix(FASTQ_ALIGN_MINIMAP2_MEASLES.out.bam)
     ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_SARS_COV2.out.bai)
     ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_H1N1.out.bai)
     ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.bai)
     ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.bai)
     ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_FLU_B_VIC.out.bai)
+    ch_bai = ch_bai.mix(FASTQ_ALIGN_MINIMAP2_MEASLES.out.bai)
     ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_SARS_COV2.out.flagstat)
     ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_H1N1.out.flagstat)
     ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_H3N2.out.flagstat)
     ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_H5N1.out.flagstat)
     ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_FLU_B_VIC.out.flagstat)
+    ch_minimap2_flagstat_multiqc = ch_minimap2_flagstat_multiqc.mix(FASTQ_ALIGN_MINIMAP2_MEASLES.out.flagstat)
 
     // Prepare RSV separation inputs
     ch_rsv_bam_bai = FASTQ_ALIGN_MINIMAP2_RSV_COMBINED.out.bam.join(FASTQ_ALIGN_MINIMAP2_RSV_COMBINED.out.bai, by: [0])
