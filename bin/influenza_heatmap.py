@@ -52,7 +52,7 @@ def parse_target_reads_tsv(file_path):
     """
     Parse combined seqkit summary TSV → return two dicts:
       1. total_target_reads: sum of all R1 read counts per sample
-      2. influenza_reads: sum of all R1 read counts per sample that contain '11308'
+      2. influenza_reads: sum of all R1 read counts per sample that contain '197911'
     
     Works for *_read_1.fastq.gz, *_1.fastp.fastq.gz, etc.
     Sample IDs are extracted using the WW\d+-\d+ pattern.
@@ -79,8 +79,8 @@ def parse_target_reads_tsv(file_path):
     # total_target_reads → sum all R1 reads per sample
     total_target_reads = df.groupby("Sample_ID")["num_seqs"].sum().to_dict()
 
-    # influenza_reads → subset with '11308' in filename
-    df_influenza = df[df["file"].str.contains("11308", na=False)]
+    # influenza_reads → subset with '197911' in filename
+    df_influenza = df[df["file"].str.contains("197911", na=False)]
     influenza_reads = df_influenza.groupby("Sample_ID")["num_seqs"].sum().to_dict()
 
     return total_target_reads, influenza_reads
