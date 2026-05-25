@@ -79,6 +79,8 @@ workflow TAXONOMY_CLASSIFICATION {
                 return tuple(meta, reads)
                 flu_B: meta.taxid == '197912'
                 return tuple(meta, reads)
+                measles: meta.taxid == '3052345'
+                return tuple(meta, reads)
             }
             .set { branched_channels }
 
@@ -87,6 +89,7 @@ workflow TAXONOMY_CLASSIFICATION {
         ch_rsv = branched_channels.rsv
         ch_flu_a = branched_channels.flu_A
         ch_flu_b = branched_channels.flu_B
+        ch_measles = branched_channels.measles
     }
 
     emit:
@@ -94,6 +97,7 @@ workflow TAXONOMY_CLASSIFICATION {
     rsv_reads       = ch_rsv // channel: [meta, reads] - RSV reads
     flu_a_reads     = ch_flu_a // channel: [meta, reads] - Influenza A reads
     flu_b_reads     = ch_flu_b // channel: [meta, reads] - Influenza B reads
+    measles_reads   = ch_measles // channel: [meta, reads] - Measles reads
     kraken2_multiqc = ch_kraken2_multiqc // channel: [meta, kraken2_report] - Kraken2 multiqc report
     versions        = ch_versions // channel: [meta, version] - workflow versions
 }
