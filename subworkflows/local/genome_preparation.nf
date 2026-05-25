@@ -10,6 +10,8 @@ include { PREPARE_GENOME as PREPARE_GENOME_H3N2         } from './prepare_genome
 include { PREPARE_GENOME as PREPARE_GENOME_H5N1         } from './prepare_genome'
 include { PREPARE_GENOME as PREPARE_GENOME_FLU_B_VIC         } from './prepare_genome'
 include { PREPARE_GENOME as PREPARE_GENOME_FLU_B_YAM         } from './prepare_genome'
+include { PREPARE_GENOME as PREPARE_GENOME_MEASLES        } from './prepare_genome'
+
 
 workflow GENOME_PREPARATION {
     main:
@@ -156,12 +158,27 @@ workflow GENOME_PREPARATION {
         params.genomes['FLU-B-YAM'].segment_gffs                     // segment_gffs map (NOT null = segmented)
     )
 
+    // Measles genome preparation (non-segmented, but has BED for genes)
+    PREPARE_GENOME_MEASLES(
+        'NC_001498.1',
+        params.genomes['NC_001498.1'].fasta,
+        params.genomes['NC_001498.1'].gff,
+        null,                                                    // primer_bed
+        null,                                                    // bowtie2_index
+        null,                                                    // nextclade_dataset
+        params.genomes['NC_001498.1'].nextclade_dataset_name,
+        params.genomes['NC_001498.1'].nextclade_dataset_tag,
+        null,                                                    // segments_bed (use null for non-segmented)
+        null                                                     // segment_gffs (null = non-segmented)
+    )
+
 
     ch_versions = ch_versions.mix(PREPARE_GENOME_SARS_COV2.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_RSV_A.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_RSV_B.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_RSV_COMBINED.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_PANEL_CONTROL.out.versions)
+    ch_versions = ch_versions.mix(PREPARE_GENOME_MEASLES.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_H1N1.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_H3N2.out.versions)
     ch_versions = ch_versions.mix(PREPARE_GENOME_H5N1.out.versions)
@@ -194,6 +211,16 @@ workflow GENOME_PREPARATION {
     rsv_combined_bowtie2_index     = PREPARE_GENOME_RSV_COMBINED.out.bowtie2_index
     panel_control_db_fasta         = PREPARE_GENOME_PANEL_CONTROL.out.fasta
     panel_control_db_bowtie2_index = PREPARE_GENOME_PANEL_CONTROL.out.bowtie2_index
+    
+    // Measles WT outputs
+    measles_fasta                     = PREPARE_GENOME_MEASLES.out.fasta
+    measles_bowtie2_index             = PREPARE_GENOME_MEASLES.out.bowtie2_index
+    measles_fai                       = PREPARE_GENOME_MEASLES.out.fai
+    measles_chrom_sizes               = PREPARE_GENOME_MEASLES.out.chrom_sizes
+    measles_gff                       = PREPARE_GENOME_MEASLES.out.gff
+    measles_snpeff_db                = PREPARE_GENOME_MEASLES.out.snpeff_db 
+    measles_snpeff_config            = PREPARE_GENOME_MEASLES.out.snpeff_config
+
     
     // H1N1 outputs
     h1n1_fasta                     = PREPARE_GENOME_H1N1.out.fasta              // Combined for alignment
@@ -254,6 +281,7 @@ workflow GENOME_PREPARATION {
     b_yam_segment_chrom_sizes       = PREPARE_GENOME_FLU_B_YAM.out.segment_chrom_sizes
     b_yam_segment_snpeff_db         = PREPARE_GENOME_FLU_B_YAM.out.segment_snpeff_db
     b_yam_segment_snpeff_config     = PREPARE_GENOME_FLU_B_YAM.out.segment_snpeff_config
+
     
     versions                       = ch_versions
 }
