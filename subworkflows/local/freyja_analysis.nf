@@ -3,6 +3,7 @@
 include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_SARS_COV2 } from '../nf-core/bam_variant_demix_boot_freyja/main'
 include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_RSV_A     } from '../nf-core/bam_variant_demix_boot_freyja/main'
 include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_RSV_B     } from '../nf-core/bam_variant_demix_boot_freyja/main'
+include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_MEASLES     } from '../nf-core/bam_variant_demix_boot_freyja/main'
 include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_H1N1      } from '../nf-core/bam_variant_demix_boot_freyja/main'
 include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_H3N2      } from '../nf-core/bam_variant_demix_boot_freyja/main'
 include { BAM_VARIANT_DEMIX_BOOT_FREYJA as BAM_VARIANT_DEMIX_BOOT_FREYJA_H5N1      } from '../nf-core/bam_variant_demix_boot_freyja/main'
@@ -18,6 +19,7 @@ workflow FREYJA_ANALYSIS {
     h3n2_ha_fasta   // channel: fasta
     h5n1_ha_fasta   // channel: fasta
     flu_b_vic_ha_fasta // channel: fasta
+    measles_wt_fasta // channel: fasta
 
     main:
     ch_versions = Channel.empty()
@@ -31,6 +33,8 @@ workflow FREYJA_ANALYSIS {
             rsv_a: meta.genome == 'PP109421.1'
                 return [meta, bam]
             rsv_b: meta.genome == 'OP975389.1'
+                return [meta, bam]
+            measles: meta.genome == 'NC_001498.1'
                 return [meta, bam]
             h1n1_ha: meta.genome == 'H1N1' && meta.segment == 'HA'
                 return [meta, bam]
@@ -73,6 +77,17 @@ workflow FREYJA_ANALYSIS {
         params.freyja_repeats,
         params.freyja_db_name_rsv_b,
         params.freyja_barcodes_rsv_b,
+        [],
+    )
+
+    // Measles Wild-Type Freyja Analysis
+    BAM_VARIANT_DEMIX_BOOT_FREYJA_MEASLES(
+        bam_by_genome.measles,
+        measles_wt_fasta,
+        params.skip_freyja_boot,
+        params.freyja_repeats,
+        params.freyja_db_name_measles,
+        params.freyja_barcodes_measles,
         [],
     )
 
@@ -119,6 +134,8 @@ workflow FREYJA_ANALYSIS {
         [],
     )
 
+
+    
     // Combine versions from all Freyja processes
     ch_versions = ch_versions.mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_SARS_COV2.out.versions)
     ch_versions = ch_versions.mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_RSV_A.out.versions)
@@ -126,11 +143,13 @@ workflow FREYJA_ANALYSIS {
     ch_versions = ch_versions.mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_H1N1.out.versions)
     ch_versions = ch_versions.mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_H3N2.out.versions)
     ch_versions = ch_versions.mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_H5N1.out.versions)
+    ch_versions = ch_versions.mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_MEASLES.out.versions)
 
     // Combine MultiQC outputs from all Freyja processes
     ch_freyja_multiqc = BAM_VARIANT_DEMIX_BOOT_FREYJA_SARS_COV2.out.demix
         .mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_RSV_A.out.demix)
         .mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_RSV_B.out.demix)
+        .mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_MEASLES.out.demix)
         .mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_H1N1.out.demix)
         .mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_H3N2.out.demix)
         .mix(BAM_VARIANT_DEMIX_BOOT_FREYJA_H5N1.out.demix)
@@ -152,6 +171,10 @@ workflow FREYJA_ANALYSIS {
             else if (meta.genome == 'OP975389.1') {
                 virus_suffix = "rsv_b"
                 virus_dir = "freyja_rsv_b"
+            }
+            else if (meta.genome == 'NC_001498.1') {
+                virus_suffix = "measles"
+                virus_dir = "freyja_measles"
             }
             else if (meta.genome == 'H1N1' && meta.segment == 'HA') {
                 virus_suffix = "h1n1_ha"
@@ -200,5 +223,7 @@ workflow FREYJA_ANALYSIS {
     h5n1_variants      = BAM_VARIANT_DEMIX_BOOT_FREYJA_H5N1.out.variants // channel: [meta, variants] - H5N1 HA variants
     flu_b_vic_demix         = BAM_VARIANT_DEMIX_BOOT_FREYJA_FLU_B_VIC.out.demix // channel: [meta, demix] - Flu B VIC HA specific demix results
     flu_b_vic_variants      = BAM_VARIANT_DEMIX_BOOT_FREYJA_FLU_B_VIC.out.variants // channel: [meta, variants] - Flu B VIC HA variants
+    measles_wt_demix         = BAM_VARIANT_DEMIX_BOOT_FREYJA_MEASLES.out.demix // channel: [meta, demix] - Measles Wild-Type specific demix results
+    measles_wt_variants      = BAM_VARIANT_DEMIX_BOOT_FREYJA_MEASLES.out.variants // channel: [meta, variants] - Measles Wild-Type variants
     versions           = ch_versions // channel: versions.yml - software versions
 }
