@@ -5,19 +5,27 @@ include { BAM_MARKDUPLICATES_PICARD as BAM_MARKDUPLICATES_PICARD_SARS_COV2 } fro
 include { BAM_MARKDUPLICATES_PICARD as BAM_MARKDUPLICATES_PICARD_RSV_A     } from '../nf-core/bam_markduplicates_picard'
 include { BAM_MARKDUPLICATES_PICARD as BAM_MARKDUPLICATES_PICARD_RSV_B     } from '../nf-core/bam_markduplicates_picard'
 include { BAM_MARKDUPLICATES_PICARD as BAM_MARKDUPLICATES_PICARD_SEGMENTS  } from '../nf-core/bam_markduplicates_picard'
+include { BAM_MARKDUPLICATES_PICARD as BAM_MARKDUPLICATES_PICARD_MEASLES  } from '../nf-core/bam_markduplicates_picard'
+
 
 // Import modules
 include { PICARD_COLLECTMULTIPLEMETRICS as PICARD_COLLECTMULTIPLEMETRICS_SARS_COV2 } from '../../modules/nf-core/picard/collectmultiplemetrics/main'
 include { PICARD_COLLECTMULTIPLEMETRICS as PICARD_COLLECTMULTIPLEMETRICS_RSV_A     } from '../../modules/nf-core/picard/collectmultiplemetrics/main'
 include { PICARD_COLLECTMULTIPLEMETRICS as PICARD_COLLECTMULTIPLEMETRICS_RSV_B     } from '../../modules/nf-core/picard/collectmultiplemetrics/main'
+include { PICARD_COLLECTMULTIPLEMETRICS as PICARD_COLLECTMULTIPLEMETRICS_MEASLES     } from '../../modules/nf-core/picard/collectmultiplemetrics/main'
+
 include { PICARD_COLLECTMULTIPLEMETRICS as PICARD_COLLECTMULTIPLEMETRICS_SEGMENTS  } from '../../modules/nf-core/picard/collectmultiplemetrics/main'
 include { MOSDEPTH as MOSDEPTH_GENOME_SARS_COV2    } from '../../modules/nf-core/mosdepth/main'
 include { MOSDEPTH as MOSDEPTH_GENOME_RSV_A        } from '../../modules/nf-core/mosdepth/main'
 include { MOSDEPTH as MOSDEPTH_GENOME_RSV_B        } from '../../modules/nf-core/mosdepth/main'
+include { MOSDEPTH as MOSDEPTH_GENOME_MEASLES       } from '../../modules/nf-core/mosdepth/main'
+
 include { MOSDEPTH as MOSDEPTH_SEGMENTS            } from '../../modules/nf-core/mosdepth/main'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_SARS_COV2 } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_A     } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B     } from '../../modules/local/plot_mosdepth_regions'
+include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME_MEASLES     } from '../../modules/local/plot_mosdepth_regions'
+
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H1N1         } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H3N2         } from '../../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_H5N1         } from '../../modules/local/plot_mosdepth_regions'
@@ -25,6 +33,8 @@ include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_SEGMENTS_FLU_B_VIC     
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_SARS_COV2 } from '../../modules/local/plot_mosdepth_regions_aggregate'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_A     } from '../../modules/local/plot_mosdepth_regions_aggregate'
 include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_RSV_B     } from '../../modules/local/plot_mosdepth_regions_aggregate'
+include { PLOT_MOSDEPTH_REGIONS_AGG as PLOT_MOSDEPTH_REGIONS_AGG_MEASLES     } from '../../modules/local/plot_mosdepth_regions_aggregate'
+
 include { PLOT_MULTIPANEL_COVERAGE_HEATMAP } from '../../modules/local/plot_multilpanel_heatmap'
 
 workflow BAM_QC_METRICS {
@@ -37,6 +47,8 @@ workflow BAM_QC_METRICS {
     rsv_a_fai              // channel: fai
     rsv_b_fasta            // channel: fasta
     rsv_b_fai              // channel: fai
+    measles_wt_fasta       // channel: fasta
+    measles_wt_fai         // channel: fai
     ch_segment_fasta       // channel: [meta[virus, segment, id], fasta] - all segments
     ch_segment_fai         // channel: [meta[virus, segment, id], fai]
 
@@ -65,7 +77,8 @@ workflow BAM_QC_METRICS {
                 return [meta, bam]
             flu_segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC'] && meta.containsKey('segment')
                 return [meta, bam]
-            
+            measles: meta.genome == 'NC_001498.1'
+                return [meta, bam]
         }
         .set { bam_by_type }
 
@@ -97,6 +110,16 @@ workflow BAM_QC_METRICS {
             rsv_b_fai
         )
         ch_versions = ch_versions.mix(BAM_MARKDUPLICATES_PICARD_RSV_B.out.versions)
+
+        // Measles mark duplicates
+        BAM_MARKDUPLICATES_PICARD_MEASLES(
+            bam_by_type.measles,
+            measles_wt_fasta.map { fasta -> [[id: 'NC_001498.1'], fasta] },
+            measles_wt_fai
+        )
+        ch_versions = ch_versions.mix(BAM_MARKDUPLICATES_PICARD_MEASLES.out.versions)
+
+
 
         // Influenza segments mark duplicates
         // Join segment BAMs with their corresponding references
@@ -139,16 +162,19 @@ workflow BAM_QC_METRICS {
         ch_output_bam = BAM_MARKDUPLICATES_PICARD_SARS_COV2.out.bam
             .mix(BAM_MARKDUPLICATES_PICARD_RSV_A.out.bam)
             .mix(BAM_MARKDUPLICATES_PICARD_RSV_B.out.bam)
+            .mix(BAM_MARKDUPLICATES_PICARD_MEASLES.out.bam)
             .mix(BAM_MARKDUPLICATES_PICARD_SEGMENTS.out.bam)
 
         ch_output_bai = BAM_MARKDUPLICATES_PICARD_SARS_COV2.out.bai
             .mix(BAM_MARKDUPLICATES_PICARD_RSV_A.out.bai)
             .mix(BAM_MARKDUPLICATES_PICARD_RSV_B.out.bai)
+            .mix(BAM_MARKDUPLICATES_PICARD_MEASLES.out.bai)
             .mix(BAM_MARKDUPLICATES_PICARD_SEGMENTS.out.bai)
 
         ch_markduplicates_flagstat_multiqc = BAM_MARKDUPLICATES_PICARD_SARS_COV2.out.flagstat
             .mix(BAM_MARKDUPLICATES_PICARD_RSV_A.out.flagstat)
             .mix(BAM_MARKDUPLICATES_PICARD_RSV_B.out.flagstat)
+            .mix(BAM_MARKDUPLICATES_PICARD_MEASLES.out.flagstat)
             .mix(BAM_MARKDUPLICATES_PICARD_SEGMENTS.out.flagstat)
     }
 
@@ -168,6 +194,8 @@ workflow BAM_QC_METRICS {
                 rsv_a: meta.genome == 'PP109421.1'
                     return [meta, bam, bai]
                 rsv_b: meta.genome == 'OP975389.1'
+                    return [meta, bam, bai]
+                measles: meta.genome == 'NC_001498.1'
                     return [meta, bam, bai]
                 flu_segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC'] && meta.containsKey('segment')
                     return [meta, bam, bai]
@@ -197,6 +225,15 @@ workflow BAM_QC_METRICS {
             [[:], []]
         )
         ch_versions = ch_versions.mix(PICARD_COLLECTMULTIPLEMETRICS_RSV_B.out.versions.first())
+
+        // Measles Picard metrics
+        PICARD_COLLECTMULTIPLEMETRICS_MEASLES(
+            bam_bai_by_type.measles,
+            measles_wt_fasta.map { fasta -> [[id: 'NC_001498.1'], fasta] },
+            [[:], []]
+        )
+        ch_versions = ch_versions.mix(PICARD_COLLECTMULTIPLEMETRICS_MEASLES.out.versions.first())
+
 
         // Segments Picard metrics - join with references
         bam_bai_by_type.flu_segments
@@ -229,6 +266,7 @@ workflow BAM_QC_METRICS {
             .mix(PICARD_COLLECTMULTIPLEMETRICS_RSV_A.out.metrics)
             .mix(PICARD_COLLECTMULTIPLEMETRICS_RSV_B.out.metrics)
             .mix(PICARD_COLLECTMULTIPLEMETRICS_SEGMENTS.out.metrics)
+            .mix(PICARD_COLLECTMULTIPLEMETRICS_MEASLES.out.metrics)
     }
 
     //
@@ -245,6 +283,8 @@ workflow BAM_QC_METRICS {
                 rsv_a: meta.genome == 'PP109421.1'
                     return [meta, bam, bai, []]
                 rsv_b: meta.genome == 'OP975389.1'
+                    return [meta, bam, bai, []]
+                measles: meta.genome == 'NC_001498.1'
                     return [meta, bam, bai, []]
                 flu_segments: meta.genome in ['H1N1', 'H3N2', 'H5N1', 'FLU-B-VIC'] && meta.containsKey('segment')
                     return [meta, bam, bai, []]
@@ -271,6 +311,13 @@ workflow BAM_QC_METRICS {
             rsv_b_fasta.map { fasta -> [[id: 'OP975389.1'], fasta] }
         )
         ch_versions = ch_versions.mix(MOSDEPTH_GENOME_RSV_B.out.versions)
+
+        // Measles MOSDEPTH
+        MOSDEPTH_GENOME_MEASLES(
+            bam_bai_by_type.measles,
+            measles_wt_fasta.map { fasta -> [[id: 'NC_001498.1'], fasta] }
+        )
+        ch_versions = ch_versions.mix(MOSDEPTH_GENOME_MEASLES.out.versions)
 
         // Segments MOSDEPTH - join with references
         bam_bai_by_type.flu_segments
@@ -329,6 +376,13 @@ workflow BAM_QC_METRICS {
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B.out.versions)
         rsvb_coverage = PLOT_MOSDEPTH_REGIONS_GENOME_RSV_B.out.all_coverage_tsv.map { tsv -> [[id: 'OP975389.1'], tsv] }
 
+        PLOT_MOSDEPTH_REGIONS_GENOME_MEASLES(
+            MOSDEPTH_GENOME_MEASLES.out.regions_bed.collect { it[1] }
+        )
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_GENOME_MEASLES.out.versions)
+        measles_coverage = PLOT_MOSDEPTH_REGIONS_GENOME_MEASLES.out.all_coverage_tsv.map { tsv -> [[id: 'NC_001498.1'], tsv] }
+
+
         //
         // Filter MOSDEPTH outputs by genome type
         //
@@ -372,6 +426,7 @@ workflow BAM_QC_METRICS {
         sars_cov_2_coverage_safe = sars_cov_2_coverage.ifEmpty([[id: 'MN908947.3_empty'], []])
         rsva_coverage_safe = rsva_coverage.ifEmpty([[id: 'PP109421.1_empty'], []])
         rsvb_coverage_safe = rsvb_coverage.ifEmpty([[id: 'OP975389.1_empty'], []])
+        measles_coverage_safe = measles_coverage.ifEmpty([[id: 'NC_001498.1_empty'], []])
         h1n1_coverage_safe = h1n1_coverage.ifEmpty([[id: 'H1N1_empty'], []])
         h3n2_coverage_safe = h3n2_coverage.ifEmpty([[id: 'H3N2_empty'], []])
         h5n1_coverage_safe = h5n1_coverage.ifEmpty([[id: 'H5N1_empty'], []])
@@ -386,6 +441,10 @@ workflow BAM_QC_METRICS {
         PLOT_MOSDEPTH_REGIONS_AGG_RSV_B(rsvb_coverage, 'rsvb')
         ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_RSV_B.out.versions)
 
+        PLOT_MOSDEPTH_REGIONS_AGG_MEASLES(measles_coverage, 'measles')
+        ch_versions = ch_versions.mix(PLOT_MOSDEPTH_REGIONS_AGG_MEASLES.out.versions)
+
+
         // Multipanel heatmap
         ch_sars_bed = params.sars_cov2_bed ? Channel.fromPath(params.sars_cov2_bed).map { bed -> [[id: 'MN908947.3'], bed] } : Channel.empty()
         ch_rsv_a_bed = params.rsv_a_bed ? Channel.fromPath(params.rsv_a_bed).map { bed -> [[id: 'PP109421.1'], bed] } : Channel.empty()
@@ -394,6 +453,7 @@ workflow BAM_QC_METRICS {
         ch_h3n2_bed = params.genomes['H3N2'].bed ? Channel.fromPath(params.genomes['H3N2'].bed ).map { bed -> [[id: 'H3N2'], bed] } : Channel.empty()
         ch_h5n1_bed = params.genomes['H5N1'].bed ? Channel.fromPath(params.genomes['H5N1'].bed ).map { bed -> [[id: 'H5N1'], bed] } : Channel.empty()
         ch_flu_b_vic_bed = params.genomes['FLU-B-VIC'].bed ? Channel.fromPath(params.genomes['FLU-B-VIC'].bed ).map { bed -> [[id: 'FLU-B-VIC'], bed] } : Channel.empty()
+        ch_measles_bed = params.genomes['NC_001498.1'].bed ? Channel.fromPath(params.genomes['NC_001498.1'].bed ).map { bed -> [[id: 'NC_001498.1'], bed] } : Channel.empty()
         ch_metadata = params.metadata ? Channel.fromPath(params.metadata) : Channel.value([])
         
         PLOT_MULTIPANEL_COVERAGE_HEATMAP(
@@ -404,6 +464,7 @@ workflow BAM_QC_METRICS {
             h3n2_coverage_safe,
             h5n1_coverage_safe,
             flu_b_vic_coverage_safe,
+            measles_coverage_safe,
             ch_sars_bed,
             ch_rsv_a_bed,
             ch_rsv_b_bed,
@@ -411,6 +472,7 @@ workflow BAM_QC_METRICS {
             ch_h3n2_bed,
             ch_h5n1_bed,
             ch_flu_b_vic_bed,
+            ch_measles_bed,
             ch_metadata
         )
         ch_versions = ch_versions.mix(PLOT_MULTIPANEL_COVERAGE_HEATMAP.out.versions)
