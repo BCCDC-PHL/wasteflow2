@@ -20,3 +20,4 @@ adhoc_scripts/*
 .params*
 *.error
 *.out
+test_data/*
